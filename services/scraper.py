@@ -10,7 +10,7 @@ async def extract_text_from_url(url: str) -> str:
     }
     
     # Fetch asynchronously so we don't block the FastAPI server
-    async with httpx.AsyncClient(headers=headers, follow_redirects=True) as client:
+    async with httpx.AsyncClient(headers=headers, follow_redirects=True, timeout=10.0) as client:
         response = await client.get(url)
         response.raise_for_status() # Throw an error if the page is a 404 or 500
         
