@@ -1,4 +1,4 @@
-from fastapi import FastAPI, HTTPException
+from fastapi import BackgroundTasks, FastAPI, HTTPException
 from pydantic import BaseModel, HttpUrl
 from contextlib import asynccontextmanager
 
@@ -11,6 +11,7 @@ from services.arxiv_fetcher import fetch_latest_arxiv_papers
 # from services.semantic_scholar_fetcher import fetch_latest_papers
 from services.openalex_fetcher import fetch_latest_papers
 from services.rss_fetcher import fetch_all_rss_feeds
+from services.processor import process_and_store_articles
 
 # Lifespan context manager runs code right before the server starts
 @asynccontextmanager
@@ -105,7 +106,7 @@ class TopicInput(BaseModel):
     topic: str
 
 @app.post("/api/research-topic")
-async def research_topic(data: TopicInput):
+async def research_topic(data: TopicInput, background_tasks: BackgroundTasks):
     """Pipeline B: Topic -> Web Search -> Scrape"""
     
     # 1. Fetch URLs for the topic
@@ -114,7 +115,7 @@ async def research_topic(data: TopicInput):
     except ValueError as e:
         raise HTTPException(status_code=500, detail=str(e))
         
-    results = []
+    articles_to_queue = []
     
     # 2. Process each URL
     for url in urls:
@@ -122,24 +123,23 @@ async def research_topic(data: TopicInput):
             # Scrape
             clean_text = await extract_text_from_url(url)
             
-            results.append({
+            articles_to_queue.append({
                 "url": url,
                 "scraped_text_length": len(clean_text),
-                "content_snippet": clean_text[:500] + "..."
+                "content_snippet": clean_text[:3000] + "..."
             })
         except Exception as e:
-            print(f"Failed to process {url}: {e}")
             continue
             
     return {
         "topic": data.topic,
-        "successful_articles": len(results),
-        "data": results
+        "successful_articles": len(articles_to_queue),
+        "data": articles_to_queue
     }
 
 
 @app.post("/api/research-openalex")    
-async def research_openalex(data: TopicInput):
+async def research_openalex(data: TopicInput, background_tasks: BackgroundTasks):
     """Pipeline B: Topic -> OpenAlex API -> Extract Abstract """
 
     try:
@@ -148,6 +148,9 @@ async def research_openalex(data: TopicInput):
     except Exception as e:
         raise HTTPException(status_code=500, detail=f"OpenAlex fetch failed: {str(e)}")
         
+    if papers:
+        background_tasks.add_task(process_and_store_articles, papers)
+        
     return {
         "topic": data.topic,
         "papers_found": len(papers),
@@ -155,7 +158,7 @@ async def research_openalex(data: TopicInput):
     }
     
 @app.post("/api/research-rss")
-async def research_rss():
+async def research_rss(background_tasks: BackgroundTasks):
     """Pipeline C: Direct RSS Track -> Extract Content (Queued for LLM later)"""
     
     # my list of important sources (change as per your interests!)
@@ -168,6 +171,9 @@ async def research_rss():
     # Fetch all feeds at exactly the same time
     articles = await fetch_all_rss_feeds(target_feeds, max_per_feed=2)
     
+    # background task to summarise and upsert to Qdrant
+    background_tasks.add_task(process_and_store_articles, articles)
+    
     # redis_queue.enqueue("summarize_task", articles)
     
     return {
@@ -175,3 +181,4 @@ async def research_rss():
         "articles_found": len(articles),
         "data": articles
     }    
+    
