@@ -8,7 +8,8 @@ from services.qdrant import initialize_collection, insert_document
 from services.scraper import extract_text_from_url
 from services.web_search import fetch_urls_for_topic
 from services.arxiv_fetcher import fetch_latest_arxiv_papers
-from services.semantic_scholar_fetcher import fetch_latest_papers
+# from services.semantic_scholar_fetcher import fetch_latest_papers
+from services.openalex_fetcher import fetch_latest_papers
 
 # Lifespan context manager runs code right before the server starts
 @asynccontextmanager
@@ -170,6 +171,27 @@ async def research_semantic_scholar(data: TopicInput):
     except Exception as e:
         print(f"   [FAILED] Semantic Scholar fetch failed: {str(e)}")
         raise HTTPException(status_code=500, detail=f"Semantic Scholar fetch failed: {str(e)}")
+        
+    print("--- Pipeline Finished! Returning data to user. ---\n")        
+    return {
+        "topic": data.topic,
+        "papers_found": len(papers),
+        "data": papers
+    }
+    
+@app.post("/api/research-openalex")    
+async def research_openalex(data: TopicInput):
+    """Pipeline B: Topic -> OpenAlex API -> Extract Abstract """
+    print(f"\n--- Starting OpenAlex Pipeline for: '{data.topic}' ---")
+
+    try:
+        # 1. Fetch the latest papers
+        print("1. Fetching from OpenAlex API...")
+        papers = await fetch_latest_papers(data.topic, max_results=2)
+        print(f"   [SUCCESS] Found {len(papers)} papers!")
+    except Exception as e:
+        print(f"   [FAILED] OpenAlex fetch failed: {str(e)}")
+        raise HTTPException(status_code=500, detail=f"OpenAlex fetch failed: {str(e)}")
         
     print("--- Pipeline Finished! Returning data to user. ---\n")        
     return {
