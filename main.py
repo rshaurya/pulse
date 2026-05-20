@@ -8,6 +8,7 @@ from services.qdrant import initialize_collection, insert_document
 from services.scraper import extract_text_from_url
 from services.web_search import fetch_urls_for_topic
 from services.arxiv_fetcher import fetch_latest_arxiv_papers
+from services.semantic_scholar_fetcher import fetch_latest_papers
 
 # Lifespan context manager runs code right before the server starts
 @asynccontextmanager
@@ -148,6 +149,27 @@ async def research_arxiv(data: TopicInput): # Re-using the TopicInput from befor
     except Exception as e:
         print(f"   [FAILED] arXiv fetch failed: {str(e)}")
         raise HTTPException(status_code=500, detail=f"arXiv fetch failed: {str(e)}")
+        
+    print("--- Pipeline Finished! Returning data to user. ---\n")        
+    return {
+        "topic": data.topic,
+        "papers_found": len(papers),
+        "data": papers
+    }
+    
+@app.post("/api/research-semantic-scholar")
+async def research_semantic_scholar(data: TopicInput):
+    """Pipeline B: Topic -> Semantic Scholar API -> Extract Abstract """
+    print(f"\n--- Starting Semantic Scholar Pipeline for: '{data.topic}' ---")
+
+    try:
+        # 1. Fetch the latest papers
+        print("1. Fetching from Semantic Scholar API...")
+        papers = await fetch_latest_papers(data.topic, max_results=2)
+        print(f"   [SUCCESS] Found {len(papers)} papers!")
+    except Exception as e:
+        print(f"   [FAILED] Semantic Scholar fetch failed: {str(e)}")
+        raise HTTPException(status_code=500, detail=f"Semantic Scholar fetch failed: {str(e)}")
         
     print("--- Pipeline Finished! Returning data to user. ---\n")        
     return {
