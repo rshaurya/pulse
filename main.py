@@ -10,6 +10,7 @@ from services.web_search import fetch_urls_for_topic
 from services.arxiv_fetcher import fetch_latest_arxiv_papers
 # from services.semantic_scholar_fetcher import fetch_latest_papers
 from services.openalex_fetcher import fetch_latest_papers
+from services.rss_fetcher import fetch_all_rss_feeds
 
 # Lifespan context manager runs code right before the server starts
 @asynccontextmanager
@@ -199,3 +200,25 @@ async def research_openalex(data: TopicInput):
         "papers_found": len(papers),
         "data": papers
     }
+    
+@app.post("/api/research-rss")
+async def research_rss():
+    """Pipeline C: Direct RSS Track -> Extract Content (Queued for LLM later)"""
+    
+    # my list of important sources (change as per your interests!)
+    target_feeds = [
+        "https://openai.com/blog/rss.xml",              # OpenAI Official Blog
+        "https://engineering.fb.com/feed/",             # Meta Engineering
+        "https://krebsonsecurity.com/feed/"             # Top Cybersecurity Blog
+    ]
+    
+    # Fetch all feeds at exactly the same time
+    articles = await fetch_all_rss_feeds(target_feeds, max_per_feed=2)
+    
+    # redis_queue.enqueue("summarize_task", articles)
+    
+    return {
+        "feeds_checked": len(target_feeds),
+        "articles_found": len(articles),
+        "data": articles
+    }    
