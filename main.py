@@ -103,7 +103,7 @@ class TopicInput(BaseModel):
 
 @app.post("/api/research-topic")
 async def research_topic(data: TopicInput):
-    """Pipeline B: Topic -> Web Search -> Scrape -> Summarize"""
+    """Pipeline B: Topic -> Web Search -> Scrape"""
     
     # 1. Fetch URLs for the topic
     try:
@@ -119,18 +119,12 @@ async def research_topic(data: TopicInput):
             # Scrape
             clean_text = await extract_text_from_url(url)
             
-            # truncate text for TESTING only - remove this in production 
-            truncated_text = clean_text[:3000]
-            
-            # Summarize
-            summary = await summarize_text(truncated_text)
-            
             results.append({
                 "url": url,
-                "summary": summary
+                "scraped_text_length": len(clean_text),
+                "content_snippet": clean_text[:500] + "..."
             })
         except Exception as e:
-            # If one URL fails to scrape, we just skip it and move to the next one
             print(f"Failed to process {url}: {e}")
             continue
             
@@ -144,34 +138,20 @@ async def research_topic(data: TopicInput):
 @app.post("/api/research-arxiv")
 async def research_arxiv(data: TopicInput): # Re-using the TopicInput from before
     """Pipeline A: Topic -> arXiv API -> Extract Abstract -> Summarize"""
+    print(f"\n--- Starting arXiv Pipeline for: '{data.topic}' ---")
     
     try:
         # 1. Fetch the latest papers
-        papers = await fetch_latest_arxiv_papers(data.topic)
+        print("1. Fetching from arXiv API...")
+        papers = await fetch_latest_arxiv_papers(data.topic, max_results=1)
+        print(f"   [SUCCESS] Found {len(papers)} papers!")
     except Exception as e:
+        print(f"   [FAILED] arXiv fetch failed: {str(e)}")
         raise HTTPException(status_code=500, detail=f"arXiv fetch failed: {str(e)}")
         
-    results = []
-    
-    # 2. Process the abstracts through our LLM
-    for paper in papers:
-        try:
-            # we skip the scraper entirely. just summarize the abstract.
-            prompt_text = f"Title: {paper['title']}\nAbstract: {paper['abstract']}"
-            summary = await summarize_text(prompt_text)
-            
-            results.append({
-                "title": paper["title"],
-                "url": paper["url"],
-                "published_date": paper["published"],
-                "ai_summary": summary
-            })
-        except Exception as e:
-            print(f"Failed to process paper {paper['title']}: {e}")
-            continue
-            
+    print("--- Pipeline Finished! Returning data to user. ---\n")        
     return {
         "topic": data.topic,
-        "papers_found": len(results),
-        "data": results
+        "papers_found": len(papers),
+        "data": papers
     }
