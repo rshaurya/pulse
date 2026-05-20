@@ -138,63 +138,16 @@ async def research_topic(data: TopicInput):
     }
 
 
-@app.post("/api/research-arxiv")
-async def research_arxiv(data: TopicInput): # Re-using the TopicInput from before
-    """Pipeline A: Topic -> arXiv API -> Extract Abstract -> Summarize"""
-    print(f"\n--- Starting arXiv Pipeline for: '{data.topic}' ---")
-    
-    try:
-        # 1. Fetch the latest papers
-        print("1. Fetching from arXiv API...")
-        papers = await fetch_latest_arxiv_papers(data.topic, max_results=1)
-        print(f"   [SUCCESS] Found {len(papers)} papers!")
-    except Exception as e:
-        print(f"   [FAILED] arXiv fetch failed: {str(e)}")
-        raise HTTPException(status_code=500, detail=f"arXiv fetch failed: {str(e)}")
-        
-    print("--- Pipeline Finished! Returning data to user. ---\n")        
-    return {
-        "topic": data.topic,
-        "papers_found": len(papers),
-        "data": papers
-    }
-    
-@app.post("/api/research-semantic-scholar")
-async def research_semantic_scholar(data: TopicInput):
-    """Pipeline B: Topic -> Semantic Scholar API -> Extract Abstract """
-    print(f"\n--- Starting Semantic Scholar Pipeline for: '{data.topic}' ---")
-
-    try:
-        # 1. Fetch the latest papers
-        print("1. Fetching from Semantic Scholar API...")
-        papers = await fetch_latest_papers(data.topic, max_results=2)
-        print(f"   [SUCCESS] Found {len(papers)} papers!")
-    except Exception as e:
-        print(f"   [FAILED] Semantic Scholar fetch failed: {str(e)}")
-        raise HTTPException(status_code=500, detail=f"Semantic Scholar fetch failed: {str(e)}")
-        
-    print("--- Pipeline Finished! Returning data to user. ---\n")        
-    return {
-        "topic": data.topic,
-        "papers_found": len(papers),
-        "data": papers
-    }
-    
 @app.post("/api/research-openalex")    
 async def research_openalex(data: TopicInput):
     """Pipeline B: Topic -> OpenAlex API -> Extract Abstract """
-    print(f"\n--- Starting OpenAlex Pipeline for: '{data.topic}' ---")
 
     try:
         # 1. Fetch the latest papers
-        print("1. Fetching from OpenAlex API...")
         papers = await fetch_latest_papers(data.topic, max_results=2)
-        print(f"   [SUCCESS] Found {len(papers)} papers!")
     except Exception as e:
-        print(f"   [FAILED] OpenAlex fetch failed: {str(e)}")
         raise HTTPException(status_code=500, detail=f"OpenAlex fetch failed: {str(e)}")
         
-    print("--- Pipeline Finished! Returning data to user. ---\n")        
     return {
         "topic": data.topic,
         "papers_found": len(papers),
