@@ -2,7 +2,6 @@ import json
 import os 
 import httpx
 from fastembed import TextEmbedding
-from ollama import AsyncClient
 from core.config import settings
 
 # 1. Load the profile into memory once when the server starts
@@ -35,8 +34,6 @@ def build_system_prompt() -> str:
     - {prefs}
     """
 
-# Initialize the async client pointing to our local Docker container
-client = AsyncClient(host=settings.LLM_BASE_URL)
 
 print("[SYSTEM] Booting CPU Vector Engine (FastEmbed)...")
 embedding_model = TextEmbedding(model_name="BAAI/bge-small-en-v1.5")
