@@ -7,7 +7,6 @@ from services.llm import summarize_text, generate_embedding
 from services.qdrant import initialize_collection, insert_document
 from services.scraper import extract_text_from_url
 from services.web_search import fetch_urls_for_topic
-from services.arxiv_fetcher import fetch_latest_arxiv_papers
 # from services.semantic_scholar_fetcher import fetch_latest_papers
 from services.openalex_fetcher import fetch_latest_papers
 from services.rss_fetcher import fetch_all_rss_feeds
