@@ -1,11 +1,11 @@
 fastapi==0.111.0
 uvicorn==0.30.1
-qdrant-client==1.9.1
-ollama==0.2.1
 httpx==0.27.0
 feedparser==6.0.11
 pydantic==2.7.4
+pydantic-settings
 trafilatura==1.9.0
-pydantic-settings-2.14.1
-python-dotenv
-fastembed
+python-dotenv==1.0.1
+fastembed==0.2.6
+hf-transfer==0.1.6
+qdrant-client==1.7.3
