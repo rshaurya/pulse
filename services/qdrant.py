@@ -2,10 +2,15 @@ import uuid
 from qdrant_client import AsyncQdrantClient
 from qdrant_client.http.models import Distance, VectorParams
 
+from services.llm import generate_embedding
+
 from core.config import settings
 
 # Initialize the async client pointing to our local Docker container
-db_client = AsyncQdrantClient(host=settings.QDRANT_HOST, port=settings.QDRANT_PORT)
+db_client = client = AsyncQdrantClient(
+        url=settings.QDRANT_URL,
+        api_key=settings.QDRANT_API_KEY
+    )
 
 
 async def initialize_collection():
@@ -41,9 +46,36 @@ async def insert_document(text: str, summary: str, embedding: list[float]) -> st
                 "payload": {
                     "raw_text": text,
                     "summary": summary,
-                    "emailed": False # Default state per our blueprint
+                    "emailed": False 
                 }
             }
         ]
     )
     return doc_id
+
+async def search_documents(query_text: str, limit: int = 5):
+    """Embeds a search query and returns the closest matching articles from Qdrant."""
+    print(f"[QDRANT] Searching for: '{query_text}'...")
+    
+    # 1. Convert the human query into vector math
+    query_vector = await generate_embedding(query_text)
+    
+    # 2. Search the database
+    client = AsyncQdrantClient(
+        url=settings.QDRANT_URL,
+        api_key=settings.QDRANT_API_KEY 
+    )
+    
+    try:
+        results = await client.search(
+            collection_name=settings.COLLECTION_NAME,
+            query_vector=query_vector,
+            limit=limit,
+            with_payload=True # we need urls too
+        )
+        print(f"[QDRANT] Found {len(results)} relevant articles.")
+        return results
+    except Exception as e:
+        print(f"[QDRANT] Search failed: {e}")
+        return []
+    
