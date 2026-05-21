@@ -18,6 +18,7 @@ async def process_and_store_articles(articles: list[dict]):
             
             # 2. Generate the Summary
             summary = await summarize_text(raw_text)
+            print(f"\n--- AI Summary Preview ---\n{summary}\n--------------------------\n")
             
             # 3. Generate the Vector Embedding
             embedding = await generate_embedding(summary)
