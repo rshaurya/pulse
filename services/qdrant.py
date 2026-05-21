@@ -6,16 +6,20 @@ from services.llm import generate_embedding
 
 from core.config import settings
 
-# Initialize the async client pointing to our local Docker container
-db_client = client = AsyncQdrantClient(
-        url=settings.QDRANT_URL,
-        api_key=settings.QDRANT_API_KEY
-    )
-
 
 async def initialize_collection():
     """Creates the collection and sets up payload indexes per the blueprint."""
-    exists = await db_client.collection_exists(settings.COLLECTION_NAME)
+    
+    db_client = client = AsyncQdrantClient(
+        url=settings.QDRANT_URL,
+        api_key=settings.QDRANT_API_KEY
+    )
+    
+    try:
+        await db_client.get_collection(settings.COLLECTION_NAME)
+        exists = True
+    except Exception:
+        exists = False
     
     if not exists:
         # Create the collection with the correct vector size and mathematical distance
@@ -35,6 +39,12 @@ async def initialize_collection():
 
 async def insert_document(text: str, summary: str, embedding: list[float]) -> str:
     """Inserts a vectorized document and its metadata into the database."""
+    
+    db_client = client = AsyncQdrantClient(
+        url=settings.QDRANT_URL,
+        api_key=settings.QDRANT_API_KEY
+    )
+    
     doc_id = str(uuid.uuid4())
     
     await db_client.upsert(
@@ -55,6 +65,12 @@ async def insert_document(text: str, summary: str, embedding: list[float]) -> st
 
 async def search_documents(query_text: str, limit: int = 5):
     """Embeds a search query and returns the closest matching articles from Qdrant."""
+    
+    db_client = client = AsyncQdrantClient(
+        url=settings.QDRANT_URL,
+        api_key=settings.QDRANT_API_KEY
+    )
+    
     print(f"[QDRANT] Searching for: '{query_text}'...")
     
     # 1. Convert the human query into vector math
