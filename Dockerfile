@@ -1,6 +1,6 @@
 FROM python:3.11-slim
 
-# to stop Python from writing .pyc files and force it to print logs instantly
+# Prevent .pyc files and force instant logging
 ENV PYTHONDONTWRITEBYTECODE=1
 ENV PYTHONUNBUFFERED=1
 
@@ -8,13 +8,16 @@ WORKDIR /app
 
 COPY requirements.txt .
 
-# Install dependencies
-RUN pip install --no-cache-dir -r requirements.txt
+RUN pip install --upgrade pip && \
+    pip install --no-cache-dir -r requirements.txt
+
+# download the FastEmbed model into the image!
+# This runs a tiny Python command to download bge-small during the build. reduces boot time later.
+RUN python -c "from fastembed import TextEmbedding; TextEmbedding(model_name='BAAI/bge-small-en-v1.5')"
 
 COPY . .
 
-# Expose FastAPI port 
+# Expose the FastAPI port
 EXPOSE 8000
 
-# The command to start the web server
 CMD ["uvicorn", "main:app", "--host", "0.0.0.0", "--port", "8000"]
