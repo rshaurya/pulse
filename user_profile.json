@@ -1,0 +1,15 @@
+{
+  "name": "PULSE User",
+  "technical_level": "Advanced (Computer Science / AI Engineering)",
+  "formatting_preferences": [
+    "Use bullet points for key takeaways",
+    "Preserve technical jargon and framework names",
+    "Assume prior knowledge of basic Python, APIs, and Machine Learning concepts",
+    "Do not use introductory fluff or generic conclusions"
+  ],
+  "core_interests": [
+    "Cybersecurity and Threat Intelligence",
+    "Retrieval-Augmented Generation (RAG)",
+    "Backend infrastructure (FastAPI, Docker)"
+  ]
+}
