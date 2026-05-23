@@ -14,16 +14,17 @@ async def fetch_and_extract_url(url: str) -> str:
         async with httpx.AsyncClient() as client:
             response = await client.get(url, headers=headers, follow_redirects=True, timeout=15.0)
             response.raise_for_status() # Throws an error if we get a 404 or 403
-            
-        print("[CRAWLER] HTML downloaded successfully. Extracting clean text...")
         
-        clean_text = trafilatura.extract(response.text)
+        extracted = trafilatura.bare_extraction(response.text)
         
-        if not clean_text:
+        if not extracted or not extracted.get('text'):
             raise ValueError("Trafilatura could not find meaningful article text on this page.")
             
-        print(f"[CRAWLER] Successfully extracted {len(clean_text)} characters.")
-        return clean_text
+        return {
+            "title": extracted.get('title', 'Unknown Title'),
+            "text": extracted.get('text'),
+            "url": url
+        }
 
     except Exception as e:
         print(f"[CRAWLER] FAILED to process {url}: {e}")
