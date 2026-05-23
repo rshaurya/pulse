@@ -31,6 +31,13 @@ class Settings(BaseSettings):
     # Web Search Config (Pipeline B)
     TAVILY_API_KEY: str | None = None 
     
+    # email settings
+    SMTP_USERNAME: str | None = None
+    USER_EMAIL: str | None = None
+    SMTP_SERVER: str = "smtp.gmail.com"
+    SMTP_PORT: int = 587
+    SMTP_PASSWORD: str | None = None
+    
 
 settings = Settings()
 
