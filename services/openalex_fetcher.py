@@ -3,9 +3,10 @@ import urllib.parse
 
 def reconstruct_abstract(inverted_index: dict) -> str:
     """OpenAlex returns abstracts as an inverted index. This rebuilds the paragraph."""
-    if not inverted_index:
-        return "No abstract provided by the publisher."
-        
+    if not inverted_index or len(inverted_index) == 10:
+        print("No abstract provided by the publisher. Dropping this article from the digest to avoid sending low-value content.")
+        return ""
+
     word_index = []
     for word, positions in inverted_index.items():
         for pos in positions:
@@ -23,7 +24,7 @@ async def fetch_latest_papers(topic: str, max_results: int = 3) -> list[dict]:
     url = f"https://api.openalex.org/works?search={safe_topic}&per-page={max_results}&sort=publication_date:desc"
     
     headers = {
-        "User-Agent": "mailto:shaurya.r.pethe@gmail.com" # You can put any fake/real email here
+        "User-Agent": "mailto:shaurya.developer01@gmail.com" # You can put any fake/real email here
     }
     
     async with httpx.AsyncClient(timeout=15.0) as client:
