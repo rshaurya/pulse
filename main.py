@@ -1,7 +1,12 @@
+import os
+import json
+
 from fastapi import BackgroundTasks, FastAPI, HTTPException, Query
 from fastapi.responses import HTMLResponse
 from pydantic import BaseModel, HttpUrl
 from contextlib import asynccontextmanager
+
+from qdrant_client import AsyncQdrantClient
 
 from core.config import settings
 from services.llm import summarize_text, generate_embedding
@@ -36,24 +41,24 @@ async def root():
         "llm_model": settings.LLM_MODEL
     }
 
-@app.post("/api/ingest-test")
-async def ingest_test(doc: DocumentInput):
-    """The Full Slice: Text -> Summary -> Vector -> Qdrant"""
+# @app.post("/api/ingest-test")
+# async def ingest_test(doc: DocumentInput):
+#     """The Full Slice: Text -> Summary -> Vector -> Qdrant"""
     
-    # 1. Summarize
-    summary = await summarize_text(doc.text)
+#     # 1. Summarize
+#     summary = await summarize_text(doc.text)
     
-    # 2. Embed
-    embedding = await generate_embedding(summary)
+#     # 2. Embed
+#     embedding = await generate_embedding(summary)
     
-    # 3. Store
-    doc_id = await insert_document(text=doc.text, summary=summary, embedding=embedding)
+#     # 3. Store
+#     doc_id = await insert_document(title = doc.title ,text=doc.text, summary=summary, embedding=embedding)
     
-    return {
-        "message": "Document successfully ingested",
-        "doc_id": doc_id,
-        "summary": summary
-    }
+#     return {
+#         "message": "Document successfully ingested",
+#         "doc_id": doc_id,
+#         "summary": summary
+#     }
 
 @app.get("/health")
 async def health_check():
@@ -190,43 +195,82 @@ class URLPayload(BaseModel):
 async def ingest_url_endpoint(payload: URLPayload):
     try:
         # Step 1: Crawl and Extract
-        raw_text = await fetch_and_extract_url(payload.url)
+        article_data = await fetch_and_extract_url(payload.url)
         
         # Step 2: The Brain (Groq Summarization)
-        summary = await summarize_text(raw_text)
+        summary = await summarize_text(article_data["text"])
         
         # Step 3: The Calculator (FastEmbed Vectorization)
         vector = await generate_embedding(summary)
         
         # Step 4: The Gatekeeper (Qdrant Storage)
         # Note: In the future we will pass the URL as metadata here!
-        doc_id = await insert_document(text=raw_text, summary=summary, embedding=vector)
+        doc_id = await insert_document(
+            title=article_data["title"],
+            url=article_data["url"],
+            text=article_data["text"],
+            summary=summary,
+            embedding=vector
+        )
         
         return {
             "status": "success", 
             "message": "URL crawled, summarized, and stored successfully!",
-            "doc_id": doc_id,
-            "preview": summary[:200] + "..."
+            "title": article_data["title"],
+            "doc_id": doc_id
         }
         
     except Exception as e:
         return {"status": "error", "message": str(e)}
 
 @app.get("/api/feedback", response_class=HTMLResponse)
+
 async def register_feedback(doc_id: str = Query(...), action: str = Query(...)):
     """Webhook to receive user feedback directly from the email digest."""
     
     print(f"[WEBHOOK] Received feedback: {action} for Document ID: {doc_id}")
     
-    # Note: For the MVP, we just print the action. 
-    # In the next phase, we will write the logic that takes this doc_id, 
-    # fetches its vector from Qdrant, and updates your user_profile.json!
+    client = AsyncQdrantClient(url=settings.QDRANT_URL, api_key=settings.QDRANT_API_KEY)
     
-    if action == "explore":
-        response_text = "<h3>Feedback Logged!</h3><p>PULSE will find more highly technical articles on this topic for your next digest.</p>"
-    elif action == "prune":
-        response_text = "<h3>Topic Pruned.</h3><p>PULSE will actively avoid this specific sub-niche in future recommendations.</p>"
-    else:
-        response_text = "<h3>Feedback Received.</h3>"
+    try:
+        points = await client.retrieve(
+            collection_name=settings.COLLECTION_NAME,
+            ids=[doc_id],
+            with_payload=True
+        )
         
-    return f"<html><body style='font-family: sans-serif; padding: 40px; text-align: center;'>{response_text}</body></html>"
+        if not points:
+            return "<html><body><h3>Error: Article not found in database.</h3></body></html>"
+            
+        article_title = points[0].payload.get("title", "this topic")
+        
+        # 2. Open the User Profile Brain
+        profile_path = os.path.join(os.path.dirname(__file__), "user_profile.json")
+        with open(profile_path, "r") as f:
+            profile = json.load(f)
+            
+        # 3. Adjust the Brain based on the click
+        if action == "explore":
+            # Add it to focus areas if it isn't already there
+            if article_title not in profile["summary_preferences"]["focus_areas"]:
+                profile["summary_preferences"]["focus_areas"].append(article_title)
+            response_text = f"<h3>Feedback Logged!</h3><p>PULSE will actively hunt for more technical depth regarding: <b>{article_title}</b></p>"
+            
+        elif action == "prune":
+            # Add a strict negative constraint to the system prompt
+            if "avoid_topics" not in profile["summary_preferences"]:
+                profile["summary_preferences"]["avoid_topics"] = []
+            if article_title not in profile["summary_preferences"]["avoid_topics"]:
+                profile["summary_preferences"]["avoid_topics"].append(article_title)
+            response_text = f"<h3>Topic Pruned.</h3><p>PULSE will filter out articles related to: <b>{article_title}</b></p>"
+            
+        # 4. Save the Brain back to the hard drive
+        with open(profile_path, "w") as f:
+            json.dump(profile, f, indent=4)
+            
+        return f"<html><body style='font-family: sans-serif; padding: 40px; text-align: center;'>{response_text}</body></html>"
+        
+    except Exception as e:
+        print(f"[WEBHOOK] CRITICAL ERROR: {e}")
+        return "<html><body><h3>System Error logging feedback.</h3></body></html>"
+    
