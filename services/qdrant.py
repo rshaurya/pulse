@@ -31,11 +31,21 @@ async def initialize_collection():
                 distance=models.Distance.COSINE
             )
         )
+        
+        print("[QDRANT] Building Payload Index for 'emailed' field...")
+        await db_client.create_payload_index(
+            collection_name=settings.COLLECTION_NAME,
+            field_name="emailed",
+            field_schema=models.PayloadSchemaType.BOOL,
+        )
+        print("[QDRANT] Initialization complete.")
     else:
         print(f"[QDRANT] Collection '{settings.COLLECTION_NAME}' verified and ready for ingestion.")
 
-async def insert_document(text: str, summary: str, embedding: list[float]) -> str:
+async def insert_document(title: str, url: str, text: str, summary: str, embedding: list[float]) -> str:
     """Inserts a vectorized document and its metadata into the database."""
+    
+    print(f"[QDRANT] Storing document: {title[:30]}...")
     
     db_client = client = AsyncQdrantClient(
         url=settings.QDRANT_URL,
@@ -51,6 +61,8 @@ async def insert_document(text: str, summary: str, embedding: list[float]) -> st
                 "id": doc_id,
                 "vector": embedding,
                 "payload": {
+                    "title": title,
+                    "url": url,
                     "raw_text": text,
                     "summary": summary,
                     "emailed": False 
