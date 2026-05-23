@@ -27,6 +27,8 @@ async def process_and_store_articles(articles: list[dict]):
             full_payload_text = f"Title: {article.get('title')}\nURL: {article.get('url')}\nContent: {raw_text}"
             
             await insert_document(
+                title = article.get('title', 'Untitled Research Paper'),
+                url = article.get('url', 'No URL provided'),
                 text=full_payload_text, 
                 summary=summary, 
                 embedding=embedding
