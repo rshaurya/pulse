@@ -1,4 +1,5 @@
 import smtplib
+import markdown
 from email.mime.text import MIMEText
 from email.mime.multipart import MIMEMultipart
 from core.config import settings
@@ -25,25 +26,38 @@ def send_daily_digest(articles: list[dict]):
     """
     
     for article in articles:
+        
         doc_id = article.get("id")
+        
         payload = article.get("payload", {})
         
-        # We use standard markdown-to-html conversion for the summary
+        title = payload.get('title', 'Untitled Intelligence')
+        url = payload.get('url', '#')
+        
+        raw_summary = payload.get('summary', 'No summary available.')
+        html_summary = markdown.markdown(raw_summary)
+        
         html_content += f"""
-        <div style="margin-bottom: 30px; padding: 15px; border: 1px solid #eee; border-radius: 8px;">
-            <p style="font-size: 14px; color: #555;">{payload.get('summary', 'No summary available').replace(chr(10), '<br>')}</p>
-            
-            <div style="margin-top: 15px;">
-                <a href="{BASE_URL}/api/feedback?doc_id={doc_id}&action=explore" 
-                   style="background-color: #3498db; color: white; padding: 8px 12px; text-decoration: none; border-radius: 4px; font-size: 12px; margin-right: 10px;">
-                   📈 Want More Like This
-                </a>
-                <a href="{BASE_URL}/api/feedback?doc_id={doc_id}&action=prune" 
-                   style="background-color: #e74c3c; color: white; padding: 8px 12px; text-decoration: none; border-radius: 4px; font-size: 12px;">
-                   📉 Prune This Topic
-                </a>
+            <div style="margin-bottom: 40px; padding: 20px; border: 1px solid #e1e4e8; border-radius: 8px; background-color: #f9fbfc;">
+                <h3 style="margin-top: 0;">
+                    <a href="{url}" style="color: #0366d6; text-decoration: none;" target="_blank">{title}</a>
+                </h3>
+                
+                <div style="font-size: 14px; color: #24292e; line-height: 1.6;">
+                    {html_summary}
+                </div>
+                
+                <div style="margin-top: 20px; border-top: 1px solid #e1e4e8; padding-top: 15px;">
+                    <a href="{BASE_URL}/api/feedback?doc_id={doc_id}&action=explore" 
+                    style="background-color: #28a745; color: white; padding: 10px 15px; text-decoration: none; border-radius: 5px; font-size: 13px; font-weight: bold; margin-right: 10px;">
+                    📈 I like this. Explore more
+                    </a>
+                    <a href="{BASE_URL}/api/feedback?doc_id={doc_id}&action=prune" 
+                    style="background-color: #d73a49; color: white; padding: 10px 15px; text-decoration: none; border-radius: 5px; font-size: 13px; font-weight: bold;">
+                    📉 Not much to my liking :(
+                    </a>
+                </div>
             </div>
-        </div>
         """
         
     html_content += """
@@ -62,3 +76,4 @@ def send_daily_digest(articles: list[dict]):
         print("[EMAIL] Digest successfully dispatched to inbox!")
     except Exception as e:
         print(f"[EMAIL] FAILED to send digest: {e}")
+        raise e
