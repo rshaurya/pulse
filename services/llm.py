@@ -8,40 +8,59 @@ from core.config import settings
 PROFILE_PATH = os.path.join(os.path.dirname(os.path.dirname(__file__)), 'user_profile.json')
 
 def load_user_profile():
+    profile_path = os.path.join(os.path.dirname(os.path.dirname(__file__)), "user_profile.json")
     try:
         with open(PROFILE_PATH, 'r') as f:
             return json.load(f)
     except FileNotFoundError:
         print("[WARNING] user_profile.json not found. Using default persona.")
-        return {}
+        return {"name": "User", "technical_level": "general"}
 
-USER_PROFILE = load_user_profile()
+# USER_PROFILE = load_user_profile()
 
-def build_system_prompt() -> str:
-    """Constructs a highly specific system prompt based on the JSON profile."""
-    if not USER_PROFILE:
-        return "You are a helpful AI summarizer. Extract the key information according to the given context."
+# def build_system_prompt() -> str:
+#     """Constructs a highly specific system prompt based on the JSON profile."""
+#     if not USER_PROFILE:
+#         return "You are a helpful AI summarizer. Extract the key information according to the given context."
         
-    prefs = "\n- ".join(USER_PROFILE.get("formatting_preferences", []))
-    interests = ", ".join(USER_PROFILE.get("core_interests", []))
+#     prefs = "\n- ".join(USER_PROFILE.get("formatting_preferences", []))
+#     interests = ", ".join(USER_PROFILE.get("core_interests", []))
     
-    return f"""You are a highly technical AI assistant serving a user with the following profile:
-    - Technical Level: {USER_PROFILE.get('technical_level')}
-    - Core Focus Areas: {interests}
+#     return f"""You are a highly technical AI assistant serving a user with the following profile:
+#     - Technical Level: {USER_PROFILE.get('technical_level')}
+#     - Core Focus Areas: {interests}
     
-    You are tasked with summarizing incoming articles and data to keep the user aware about recent developments in their field of interest. 
-    You MUST adhere to these strict formatting rules:
-    - {prefs}
-    """
+#     You are tasked with summarizing incoming articles and data to keep the user aware about recent developments in their field of interest. 
+#     You MUST adhere to these strict formatting rules:
+#     - {prefs}
+#     """
 
 
 print("[SYSTEM] Booting CPU Vector Engine (FastEmbed)...")
 embedding_model = TextEmbedding(model_name="BAAI/bge-small-en-v1.5")
 
 async def summarize_text(text: str) -> str:
-    """Sends the text and the user persona to a Cloud LLM."""
+    """Sends the text to Groq API and returns a personalised summary."""
+    print("[LLM] Generating context-aware summary via Groq...")
     
-    system_prompt = build_system_prompt()
+    profile = load_user_profile()
+    
+    system_prompt = f"""
+    You are an elite technical research assistant. Your job is to summarize the provided text for {profile.get('name')}.
+    They are at a {profile.get('technical_level')} level. 
+    Focus heavily on these core interests if they appear in the text: {', '.join(profile.get('core_interests', []))}.
+    When summarizing, adhere to these preferences: {profile.get('summary_preferences', {}).get('tone', 'Clear and concise.')}.
+    Highlight these specific areas if applicable: {', '.join(profile.get('summary_preferences', {}).get('focus_areas', []))}.
+    Look for any recent developments or insights that would be particularly relevant to their interests.
+    Make sure they don't miss out on any critical information that could impact their learning or projects in these areas.
+    """
+    
+    headers = {
+        "Authorization": f"Bearer {settings.LLM_API_KEY}",
+        "Content-Type": "application/json"
+    }
+    
+    # system_prompt = build_system_prompt()
     
     # Standard OpenAI-compatible payload (Used by Groq, Together AI, OpenAI, etc.)
     payload = {
@@ -59,17 +78,31 @@ async def summarize_text(text: str) -> str:
         headers["Authorization"] = f"Bearer {settings.LLM_API_KEY}"
     
     # We can drop the timeout back down to 30s because Cloud APIs don't have "cold boots"!
-    async with httpx.AsyncClient(timeout=30.0) as client:
-        response = await client.post(
-            settings.LLM_BASE_URL, 
-            json=payload,
-            headers=headers
-        )
-        response.raise_for_status()
-        data = response.json()
+    # async with httpx.AsyncClient(timeout=30.0) as client:
+    #     response = await client.post(
+    #         settings.LLM_BASE_URL, 
+    #         json=payload,
+    #         headers=headers
+    #     )
+    #     response.raise_for_status()
+    #     data = response.json()
+    async with httpx.AsyncClient() as client:
+        try:
+            response = await client.post(
+                settings.LLM_BASE_URL,
+                headers=headers,
+                json=payload,
+                timeout=30.0
+            )
+            response.raise_for_status()
+            data = response.json()
+            return data["choices"][0]["message"]["content"]
+        except Exception as e:
+            print(f"[LLM] FAILED to generate summary: {e}")
+            raise e
         
         # Parse the standard cloud response format
-        return data["choices"][0]["message"]["content"]
+        # return data["choices"][0]["message"]["content"]
 
 async def generate_embedding(text: str) -> list[float]:
     """Generates 384-dimensional vectors locally on the CPU using FastEmbed."""
