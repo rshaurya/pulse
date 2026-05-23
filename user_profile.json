@@ -1,15 +1,21 @@
 {
-  "name": "PULSE User",
-  "technical_level": "Advanced (Computer Science / AI Engineering)",
-  "formatting_preferences": [
-    "Use bullet points for key takeaways",
-    "Preserve technical jargon and framework names",
-    "Assume prior knowledge of basic Python, APIs, and Machine Learning concepts",
-    "Do not use introductory fluff or generic conclusions"
-  ],
+  "name": "Shaurya",
+  "technical_level": "advanced_undergrad",
   "core_interests": [
-    "Cybersecurity and Threat Intelligence",
-    "Retrieval-Augmented Generation (RAG)",
-    "Backend infrastructure (FastAPI, Docker)"
-  ]
+    "Artificial Intelligence", 
+    "Machine Learning", 
+    "Cybersecurity", 
+    "Python Backend Architecture",
+    "finance and economics"
+  ],
+  "summary_preferences": {
+    "focus_areas": [
+      "Implementation logic", 
+      "Security implications", 
+      "Underlying algorithms",
+      "Performance optimizations",
+      "New research findings"
+    ],
+    "tone": "Technical, concise, and highly analytical. Skip the fluff."
+  }
 }
