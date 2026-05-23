@@ -1,5 +1,5 @@
 import uuid
-from qdrant_client import AsyncQdrantClient
+from qdrant_client import AsyncQdrantClient, models
 from qdrant_client.http.models import Distance, VectorParams
 
 from services.llm import generate_embedding
@@ -8,34 +8,31 @@ from core.config import settings
 
 
 async def initialize_collection():
-    """Creates the collection and sets up payload indexes per the blueprint."""
+    print(f"[QDRANT] Connecting to Qdrant Cloud...")
     
-    db_client = client = AsyncQdrantClient(
+    db_client = AsyncQdrantClient(
         url=settings.QDRANT_URL,
         api_key=settings.QDRANT_API_KEY
     )
     
-    try:
-        await db_client.get_collection(settings.COLLECTION_NAME)
-        exists = True
-    except Exception:
-        exists = False
+    # THE SRE FIX: Ask for the guest list instead of relying on try/except!
+    response = await db_client.get_collections()
     
-    if not exists:
-        # Create the collection with the correct vector size and mathematical distance
+    # Extract just the names of the collections into a simple Python list
+    existing_collections = [col.name for col in response.collections]
+    print(f"[QDRANT] Existing collections: {existing_collections}")
+    
+    if settings.COLLECTION_NAME not in existing_collections:
+        print("[QDRANT] Collection not found. Creating a new one for FastEmbed (384 dims)...")
         await db_client.create_collection(
             collection_name=settings.COLLECTION_NAME,
-            vectors_config=VectorParams(size=settings.VECTOR_SIZE, distance=Distance.COSINE),
+            vectors_config=models.VectorParams(
+                size=384, 
+                distance=models.Distance.COSINE
+            )
         )
-        
-        # Blueprint Requirement: State Tracking (Solving Repetition)
-        # We index the 'emailed' field for fast must_not filtering
-        await db_client.create_payload_index(
-            collection_name=settings.COLLECTION_NAME,
-            field_name="emailed",
-            field_schema="bool",
-        )
-        print(f"Created Qdrant collection: {settings.COLLECTION_NAME}")
+    else:
+        print(f"[QDRANT] Collection '{settings.COLLECTION_NAME}' verified and ready for ingestion.")
 
 async def insert_document(text: str, summary: str, embedding: list[float]) -> str:
     """Inserts a vectorized document and its metadata into the database."""
