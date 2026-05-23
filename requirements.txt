@@ -9,3 +9,4 @@ python-dotenv==1.0.1
 fastembed==0.2.6
 hf-transfer==0.1.6
 qdrant-client==1.7.3
+markdown==3.5.2
