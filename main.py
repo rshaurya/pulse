@@ -1,4 +1,5 @@
-from fastapi import BackgroundTasks, FastAPI, HTTPException
+from fastapi import BackgroundTasks, FastAPI, HTTPException, Query
+from fastapi.responses import HTMLResponse
 from pydantic import BaseModel, HttpUrl
 from contextlib import asynccontextmanager
 
@@ -11,6 +12,7 @@ from services.web_search import fetch_urls_for_topic
 from services.openalex_fetcher import fetch_latest_papers
 from services.rss_fetcher import fetch_all_rss_feeds
 from services.processor import process_and_store_articles
+from services.crawler import fetch_and_extract_url
 
 # Lifespan context manager runs code right before the server starts
 @asynccontextmanager
@@ -181,3 +183,50 @@ async def research_rss(background_tasks: BackgroundTasks):
         "data": articles
     }    
     
+class URLPayload(BaseModel):
+    url: str
+
+@app.post("/api/ingest-url")
+async def ingest_url_endpoint(payload: URLPayload):
+    try:
+        # Step 1: Crawl and Extract
+        raw_text = await fetch_and_extract_url(payload.url)
+        
+        # Step 2: The Brain (Groq Summarization)
+        summary = await summarize_text(raw_text)
+        
+        # Step 3: The Calculator (FastEmbed Vectorization)
+        vector = await generate_embedding(summary)
+        
+        # Step 4: The Gatekeeper (Qdrant Storage)
+        # Note: In the future we will pass the URL as metadata here!
+        doc_id = await insert_document(text=raw_text, summary=summary, embedding=vector)
+        
+        return {
+            "status": "success", 
+            "message": "URL crawled, summarized, and stored successfully!",
+            "doc_id": doc_id,
+            "preview": summary[:200] + "..."
+        }
+        
+    except Exception as e:
+        return {"status": "error", "message": str(e)}
+
+@app.get("/api/feedback", response_class=HTMLResponse)
+async def register_feedback(doc_id: str = Query(...), action: str = Query(...)):
+    """Webhook to receive user feedback directly from the email digest."""
+    
+    print(f"[WEBHOOK] Received feedback: {action} for Document ID: {doc_id}")
+    
+    # Note: For the MVP, we just print the action. 
+    # In the next phase, we will write the logic that takes this doc_id, 
+    # fetches its vector from Qdrant, and updates your user_profile.json!
+    
+    if action == "explore":
+        response_text = "<h3>Feedback Logged!</h3><p>PULSE will find more highly technical articles on this topic for your next digest.</p>"
+    elif action == "prune":
+        response_text = "<h3>Topic Pruned.</h3><p>PULSE will actively avoid this specific sub-niche in future recommendations.</p>"
+    else:
+        response_text = "<h3>Feedback Received.</h3>"
+        
+    return f"<html><body style='font-family: sans-serif; padding: 40px; text-align: center;'>{response_text}</body></html>"
