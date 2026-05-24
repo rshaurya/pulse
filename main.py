@@ -26,10 +26,10 @@ scheduler = AsyncIOScheduler()
 
 @asynccontextmanager
 async def lifespan(app: FastAPI):
+    """Lifespan context manager to handle startup and shutdown events."""
     print("[SYSTEM] Booting up PULSE Automation Heartbeat...")
     
     await initialize_collection()
-    # yield
     
     # THE SCHEDULE: 
     # For testing right now, we will set it to run every 2 minutes.
@@ -53,19 +53,7 @@ async def lifespan(app: FastAPI):
     scheduler.shutdown()
 
 
-# Lifespan context manager runs code right before the server starts
-# @asynccontextmanager
-# async def lifespan(app: FastAPI):
-#     # Ensure Qdrant is ready and formatted before taking requests
-#     await initialize_collection()
-#     yield
-
 app = FastAPI(title=settings.PROJECT_NAME, lifespan=lifespan)
-
-# Data Model for our incoming request
-class DocumentInput(BaseModel):
-    text: str
-
 
 @app.get("/")
 async def root():
@@ -75,79 +63,28 @@ async def root():
         "llm_model": settings.LLM_MODEL
     }
 
-# @app.post("/api/ingest-test")
-# async def ingest_test(doc: DocumentInput):
-#     """The Full Slice: Text -> Summary -> Vector -> Qdrant"""
-    
-#     # 1. Summarize
-#     summary = await summarize_text(doc.text)
-    
-#     # 2. Embed
-#     embedding = await generate_embedding(summary)
-    
-#     # 3. Store
-#     doc_id = await insert_document(title = doc.title ,text=doc.text, summary=summary, embedding=embedding)
-    
-#     return {
-#         "message": "Document successfully ingested",
-#         "doc_id": doc_id,
-#         "summary": summary
-#     }
-
 @app.get("/health")
 async def health_check():
-    # Later, we will add Qdrant and Ollama ping checks here
     return {"status": "healthy"}
 
-@app.post("/api/test-llm")
-async def test_llm_pipeline(doc: DocumentInput):
-    """Temporary endpoint to test Ollama summarization and embedding."""
-    
-    # 1. Summarize the text
-    summary = await summarize_text(doc.text)
-    
-    # 2. Convert the summary into a vector
-    embedding = await generate_embedding(summary)
-    
-    return {
-        "original_length": len(doc.text),
-        "summary": summary,
-        # We just return the length of the embedding so we don't flood your screen with thousands of numbers
-        "embedding_dimensions": len(embedding) 
-    }
-    
+# Data models for API endpoints
 class URLInput(BaseModel):
     url: HttpUrl
 
-@app.post("/api/summarize-url")
-async def summarize_url_only(data: URLInput):
-    """Temporary endpoint: Fetch URL -> Extract Text -> Summarize (No DB insertion)"""
-    try:
-        # 1. Scrape the clean text
-        clean_text = await extract_text_from_url(str(data.url))
-        
-        # 2. Generate the summary
-        summary = await summarize_text(clean_text)
-        
-        return {
-            "url": str(data.url),
-            "original_character_count": len(clean_text),
-            "summary": summary
-        }
-        
-    except ValueError as e:
-        # Catch Trafilatura extraction failures
-        raise HTTPException(status_code=422, detail=str(e))
-    except Exception as e:
-        # Catch network errors (bad url, timeout, etc)
-        raise HTTPException(status_code=400, detail=f"Failed to fetch URL: {str(e)}")    
-
 class TopicInput(BaseModel):
     topic: str
+    
+class URLPayload(BaseModel):
+    url: str
 
-@app.post("/api/research-topic")
+
+# API Endpoints
+
+
+# Endpoint to search for articles / blogs / resources of a topic using web search and scrape the top results
+@app.post("/api/research-topic-on-web")
 async def research_topic(data: TopicInput, background_tasks: BackgroundTasks):
-    """Pipeline B: Topic -> Web Search -> Scrape"""
+    """Topic -> Web Search -> Get Links -> Scrape"""
     
     # 1. Fetch URLs for the topic
     try:
@@ -178,6 +115,7 @@ async def research_topic(data: TopicInput, background_tasks: BackgroundTasks):
     }
 
 
+# Endpoint to fetch latest papers from OpenAlex API on given topic and extract abstracts (if available)
 @app.post("/api/research-openalex")    
 async def research_openalex(data: TopicInput, background_tasks: BackgroundTasks):
     """Pipeline B: Topic -> OpenAlex API -> Extract Abstract """
@@ -196,7 +134,8 @@ async def research_openalex(data: TopicInput, background_tasks: BackgroundTasks)
         "papers_found": len(papers),
         "data": papers
     }
-    
+
+# Endpoint to fetch and process articles from RSS feeds of important blogs    
 @app.post("/api/research-rss")
 async def research_rss(background_tasks: BackgroundTasks):
     """Pipeline C: Direct RSS Track -> Extract Content (Queued for LLM later)"""
@@ -206,9 +145,10 @@ async def research_rss(background_tasks: BackgroundTasks):
         "https://openai.com/blog/rss.xml",              # OpenAI Official Blog
         "https://engineering.fb.com/feed/",             # Meta Engineering
         "https://krebsonsecurity.com/feed/"             # Top Cybersecurity Blog
+        # add anthropic blog, google ai blog, arxiv cs rss feed, etc. as per your interests!
+        # ADD OTHER MAJOR BLOGS HERE!
     ]
     
-    # Fetch all feeds at exactly the same time
     articles = await fetch_all_rss_feeds(target_feeds, max_per_feed=2)
     
     # background task to summarise and upsert to Qdrant
@@ -222,23 +162,21 @@ async def research_rss(background_tasks: BackgroundTasks):
         "data": articles
     }    
     
-class URLPayload(BaseModel):
-    url: str
 
+# Endpoint that takes any user-provided URL and scrapes the text
 @app.post("/api/ingest-url")
 async def ingest_url_endpoint(payload: URLPayload):
     try:
-        # Step 1: Crawl and Extract
+        # Crawl and Extract
         article_data = await fetch_and_extract_url(payload.url)
         
-        # Step 2: The Brain (Groq Summarization)
+        # summarization
         summary = await summarize_text(article_data["text"])
         
-        # Step 3: The Calculator (FastEmbed Vectorization)
+        # FastEmbed embeddings
         vector = await generate_embedding(summary)
         
-        # Step 4: The Gatekeeper (Qdrant Storage)
-        # Note: In the future we will pass the URL as metadata here!
+        # Qdrant Storage
         doc_id = await insert_document(
             title=article_data["title"],
             url=article_data["url"],
@@ -257,6 +195,8 @@ async def ingest_url_endpoint(payload: URLPayload):
     except Exception as e:
         return {"status": "error", "message": str(e)}
 
+
+# Endpoint to receive user feedback from email interactions and update the user_profile.json accordingly
 @app.get("/api/feedback", response_class=HTMLResponse)
 
 async def register_feedback(doc_id: str = Query(...), action: str = Query(...)):
@@ -278,12 +218,11 @@ async def register_feedback(doc_id: str = Query(...), action: str = Query(...)):
             
         article_title = points[0].payload.get("title", "this topic")
         
-        # 2. Open the User Profile Brain
         profile_path = os.path.join(os.path.dirname(__file__), "user_profile.json")
         with open(profile_path, "r") as f:
             profile = json.load(f)
             
-        # 3. Adjust the Brain based on the click
+        # adjust the user_profile.json based on the click
         if action == "explore":
             # Add it to focus areas if it isn't already there
             if article_title not in profile["summary_preferences"]["focus_areas"]:
@@ -298,7 +237,6 @@ async def register_feedback(doc_id: str = Query(...), action: str = Query(...)):
                 profile["summary_preferences"]["avoid_topics"].append(article_title)
             response_text = f"<h3>Topic Pruned.</h3><p>PULSE will filter out articles related to: <b>{article_title}</b></p>"
             
-        # 4. Save the Brain back to the hard drive
         with open(profile_path, "w") as f:
             json.dump(profile, f, indent=4)
             
