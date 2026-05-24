@@ -1,6 +1,7 @@
 import os
 import json
 
+from typing import List, Optional
 from fastapi import BackgroundTasks, FastAPI, HTTPException, Query
 from fastapi.responses import HTMLResponse
 from pydantic import BaseModel, HttpUrl
@@ -19,6 +20,7 @@ from services.openalex_fetcher import fetch_latest_papers
 from services.rss_fetcher import fetch_all_rss_feeds
 from services.processor import process_and_store_articles
 from services.crawler import fetch_and_extract_url
+from services.orchestrator import run_autonomous_crawler
 
 from scripts.dispatcher import generate_daily_digest
 
@@ -76,6 +78,11 @@ class TopicInput(BaseModel):
     
 class URLPayload(BaseModel):
     url: str
+    
+class MasterIngestPayload(BaseModel):
+    urls: Optional[List[str]] = []
+    topics: Optional[List[str]] = [] 
+    rss_feeds: Optional[List[str]] = []
 
 
 # API Endpoints
@@ -245,4 +252,15 @@ async def register_feedback(doc_id: str = Query(...), action: str = Query(...)):
     except Exception as e:
         print(f"[WEBHOOK] CRITICAL ERROR: {e}")
         return "<html><body><h3>System Error logging feedback.</h3></body></html>"
+
+@app.post("/api/ingest/autonomous")
+async def trigger_autonomous_crawler(background_tasks: BackgroundTasks):
+    """Acts as a manual trigger for the autonomous web crawler."""
     
+    # Fire and Forget: Wake up the agent in the background
+    background_tasks.add_task(run_autonomous_crawler)
+    
+    return {
+        "status": "processing", 
+        "message": "Autonomous Crawler triggered. It is currently reading user_profile.json and hunting for data."
+    }
