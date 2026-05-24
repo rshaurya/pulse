@@ -25,6 +25,15 @@ async def fetch_and_extract_url(url: str) -> str:
             "text": extracted.get('text'),
             "url": url
         }
+        
+    except httpx.HTTPStatusError as e:
+        # THE FIX: Catch firewalls and paywalls explicitly
+        if e.response.status_code in [401, 403]:
+            print(f"[CRAWLER] Walled Garden detected (403 Forbidden). Skipping {url}")
+            return None # Return None so the Orchestrator knows to drop it
+        else:
+            print(f"[CRAWLER] HTTP Error {e.response.status_code} on {url}")
+            return None
 
     except Exception as e:
         print(f"[CRAWLER] FAILED to process {url}: {e}")
