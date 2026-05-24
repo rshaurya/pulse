@@ -5,26 +5,60 @@ from fastapi import BackgroundTasks, FastAPI, HTTPException, Query
 from fastapi.responses import HTMLResponse
 from pydantic import BaseModel, HttpUrl
 from contextlib import asynccontextmanager
-
+from apscheduler.schedulers.asyncio import AsyncIOScheduler
+from apscheduler.triggers.cron import CronTrigger
 from qdrant_client import AsyncQdrantClient
 
 from core.config import settings
+
 from services.llm import summarize_text, generate_embedding
 from services.qdrant import initialize_collection, insert_document
 from services.scraper import extract_text_from_url
 from services.web_search import fetch_urls_for_topic
-# from services.semantic_scholar_fetcher import fetch_latest_papers
 from services.openalex_fetcher import fetch_latest_papers
 from services.rss_fetcher import fetch_all_rss_feeds
 from services.processor import process_and_store_articles
 from services.crawler import fetch_and_extract_url
 
-# Lifespan context manager runs code right before the server starts
+from scripts.dispatcher import generate_daily_digest
+
+scheduler = AsyncIOScheduler()
+
 @asynccontextmanager
 async def lifespan(app: FastAPI):
-    # Ensure Qdrant is ready and formatted before taking requests
+    print("[SYSTEM] Booting up PULSE Automation Heartbeat...")
+    
     await initialize_collection()
+    # yield
+    
+    # THE SCHEDULE: 
+    # For testing right now, we will set it to run every 2 minutes.
+    scheduler.add_job(
+        generate_daily_digest, 
+        trigger='interval', 
+        minutes=2, 
+        id="test_digest_job",
+        replace_existing=True
+    )
+
+    # uncomment below line and comment the above scheduler.add_job in prod
+    # scheduler.add_job(generate_daily_digest, trigger=CronTrigger(hour=7, minute=0), id="daily_digest_job")
+    
+    scheduler.start()
+    print("[SYSTEM] Scheduler running. Waiting for next tick...")
+    
     yield
+    
+    print("[SYSTEM] Shutting down Scheduler...")
+    scheduler.shutdown()
+
+
+# Lifespan context manager runs code right before the server starts
+# @asynccontextmanager
+# async def lifespan(app: FastAPI):
+#     # Ensure Qdrant is ready and formatted before taking requests
+#     await initialize_collection()
+#     yield
 
 app = FastAPI(title=settings.PROJECT_NAME, lifespan=lifespan)
 
