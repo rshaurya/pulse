@@ -16,6 +16,10 @@ async def process_and_store_articles(articles: list[dict]):
             # 1. Grab the raw text (we'll use abstract or content_snippet)
             raw_text = article.get('abstract') or article.get('content_snippet') or article.get('title')
             
+            if len(raw_text) < 14000:
+                print("   [INFO] Article too long. Truncating to fit LLM context window...")
+                raw_text = raw_text[:14000] + "... [TRUNCATED]"
+            
             # 2. Generate the Summary
             summary = await summarize_text(raw_text)
             print(f"\n--- AI Summary Preview ---\n{summary}\n--------------------------\n")
@@ -37,8 +41,13 @@ async def process_and_store_articles(articles: list[dict]):
             successful_inserts += 1
             print(f"   [SUCCESS] Saved to Qdrant!")
             
+            await asyncio.sleep(5)
+            
         except Exception as e:
             print(f"   [FAILED] Could not process {article.get('title')}: {e}")
+            if "429" in str(e):
+                print("   [RATE LIMIT] Backing off for 10 seconds...")
+                await asyncio.sleep(10)
             continue
             
     print(f"[BACKGROUND WORKER] Finished! Successfully stored {successful_inserts}/{len(articles)} documents in Qdrant.\n")
