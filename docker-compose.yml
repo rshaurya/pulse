@@ -1,23 +1,22 @@
+version: '3.8'
+
 services:
-  qdrant:
-    image: qdrant/qdrant:latest
-    container_name: pulse_qdrant
+  pulse-engine:
+    build: .
+    container_name: pulse-app
     ports:
-      - "6333:6333"
-      - "6334:6334"
+      - "8000:8000"
+    env_file:
+      - .env
     volumes:
-      - qdrant_storage:/qdrant/storage
+      - ./user_profile.json:/app/user_profile.json
     restart: unless-stopped
-
-  ollama:
-    image: ollama/ollama:latest
-    container_name: pulse_ollama
-    ports:
-      - "11434:11434"
-    volumes:
-      - ollama_storage:/root/.ollama
-    restart: unless-stopped
-
-volumes:
-  qdrant_storage:
-  ollama_storage:
+    
+  # If someone wants to run Qdrant locally instead of the cloud, 
+  # they can just uncomment the block below!
+  # qdrant:
+  #   image: qdrant/qdrant:latest
+  #   ports:
+  #     - "6333:6333"
+  #   volumes:
+  #     - ./qdrant_data:/qdrant/storage
