@@ -101,11 +101,11 @@ This v0.1 release is for people in the technical field. But I am already buildin
 
 ## 📬 Get Early Access to the Next Version
 If you are a non-technical user, or you just want to wait for the web app version of PULSE,  
-[Send me an email here](shaurya.r.pethe@gmail.com). I will notify you the moment the cloud version goes live. (the email donesn't have to be anything fancy. Just send the field you're working in or have interest in).
+[Send me an email here](mailto:shaurya.r.pethe@gmail.com). I will notify you the moment the cloud version goes live. (the email donesn't have to be anything fancy. Just send the field you're working in or have interest in).
 
 ## 🤝 Support & Feedback 
 **Not getting the results you want?**  
-AI is unpredictable. If you are a researcher in a highly specific niche and PULSE isn't finding good articles or the summaries feel shallow, drop me an email at [shaurya.r.pethe@gmail.com](shaurya.r.pethe@gmail.com). I want to study your edge cases to make the extraction pipeline better.
+AI is unpredictable. If you are a researcher in a highly specific niche and PULSE isn't finding good articles or the summaries feel shallow, drop me an email at [shaurya.r.pethe@gmail.com](mailto:shaurya.r.pethe@gmail.com). I want to study your edge cases to make the extraction pipeline better.
 
 **Open Source Contributions:**  
 Currently, pull requests are closed because I will be  working on the features mentioned above for v0.2. 
