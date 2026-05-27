@@ -77,3 +77,40 @@ def send_daily_digest(articles: list[dict]):
     except Exception as e:
         print(f"[EMAIL] FAILED to send digest: {e}")
         raise e
+    
+def send_magic_link_email(to_email: str, magic_link: str):
+    """Dispatches the secure passwordless login link to the user."""
+    print(f"[AUTH] Dispatching Magic Link to {to_email}...")
+    
+    msg = MIMEMultipart("alternative")
+    msg["Subject"] = "PULSE: Your Secure Login Link"
+    msg["From"] = settings.SMTP_USERNAME
+    msg["To"] = to_email
+    
+    html_content = f"""
+    <html>
+      <body style="font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, Helvetica, Arial, sans-serif; max-width: 500px; margin: 40px auto; padding: 20px; border: 1px solid #eaeaea; border-radius: 10px;">
+        <h2 style="color: #2c3e50; text-align: center;">Welcome to PULSE</h2>
+        <p style="color: #4a5568; font-size: 16px; text-align: center;">Click the button below to securely log into your autonomous research engine. This link expires in 15 minutes.</p>
+        
+        <div style="text-align: center; margin-top: 30px; margin-bottom: 30px;">
+            <a href="{magic_link}" style="background-color: #000000; color: #ffffff; padding: 12px 24px; text-decoration: none; border-radius: 6px; font-weight: bold; font-size: 16px;">
+                Authenticate & Log In
+            </a>
+        </div>
+        
+        <p style="color: #a0aec0; font-size: 12px; text-align: center;">If you did not request this email, you can safely ignore it.</p>
+      </body>
+    </html>
+    """
+    
+    msg.attach(MIMEText(html_content, "html"))
+    
+    try:
+        with smtplib.SMTP(settings.SMTP_SERVER, settings.SMTP_PORT) as server:
+            server.starttls()
+            server.login(settings.SMTP_USERNAME, settings.SMTP_PASSWORD)
+            server.send_message(msg)
+        print(f"[AUTH] Successfully sent Magic Link to {to_email}")
+    except Exception as e:
+        print(f"[AUTH ERROR] Failed to send Magic Link: {e}")
