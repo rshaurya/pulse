@@ -2,17 +2,20 @@ import os
 import json
 
 from typing import List, Optional
-from fastapi import BackgroundTasks, FastAPI, HTTPException, Query
+from fastapi import BackgroundTasks, FastAPI, HTTPException, Query, Depends
 from fastapi.responses import HTMLResponse
 from pydantic import BaseModel, HttpUrl
 from contextlib import asynccontextmanager
 from apscheduler.schedulers.asyncio import AsyncIOScheduler
 from apscheduler.triggers.cron import CronTrigger
 from qdrant_client import AsyncQdrantClient
+from sqlmodel import select
+from sqlmodel.ext.asyncio.session import AsyncSession
 
 from core.config import settings
-from core.models import SQLModel
-from core.database import engine
+from core.models import SQLModel, User, UserProfile
+from core.database import engine, get_session
+from core.security import create_magic_token, verify_magic_token
 
 from services.llm import summarize_text, generate_embedding
 from services.qdrant import initialize_collection, insert_document
@@ -90,6 +93,9 @@ class MasterIngestPayload(BaseModel):
     urls: Optional[List[str]] = []
     topics: Optional[List[str]] = [] 
     rss_feeds: Optional[List[str]] = []
+    
+class MagicLinkRequest(BaseModel):
+    email: str
 
 
 # API Endpoints
@@ -270,4 +276,69 @@ async def trigger_autonomous_crawler(background_tasks: BackgroundTasks):
     return {
         "status": "processing", 
         "message": "Autonomous Crawler triggered. It is currently reading user_profile.json and hunting for data."
+    }
+
+@app.post("/api/auth/request")
+async def request_magic_link(
+    payload: MagicLinkRequest, 
+    session: AsyncSession = Depends(get_session)
+):
+    """Generates the VIP pass and 'emails' it to the user."""
+    
+    email = payload.email.lower().strip()
+    
+    # Does this user exist in db
+    statement = select(User).where(User.email == email)
+    result = await session.exec(statement)
+    user = result.one_or_none()
+    
+    # If they don't exist, create an account for them automatically!
+    if not user:
+        print(f"[AUTH] Creating new account for {email}")
+        user = User(email=email)
+        session.add(user)
+        await session.commit()
+        await session.refresh(user)
+        
+        # Create a blank JSON use profile 
+        profile = UserProfile(user_id=user.id)
+        session.add(profile)
+        await session.commit()
+
+    # Create the cryptographic token
+    token = create_magic_token(email)
+    
+    # Construct the Magic Link
+    # In production, this will be frontend URL (e.g., https://pulse.com/verify?token=...)
+    magic_link = f"http://localhost:8000/api/auth/verify?token={token}"
+    
+    # TODO: email this link using services/email.py!
+    # right now, print it to the terminal so we can click it
+    print(f"\\n{'='*50}\\n[MAGIC LINK FOR {email}]:\\n{magic_link}\\n{'='*50}\\n")
+    
+    return {"status": "success", "message": "Check your email for the magic link!"}
+
+
+@app.get("/api/auth/verify")
+async def verify_login(token: str, session: AsyncSession = Depends(get_session)):
+    """The user clicks the link in their email and hits this endpoint."""
+    
+    # check the token
+    email = verify_magic_token(token)
+    
+    if not email:
+        raise HTTPException(status_code=401, detail="Link is invalid or has expired.")
+        
+    statement = select(User).where(User.email == email)
+    result = await session.exec(statement)
+    user = result.one_or_none()
+    
+    if not user:
+         raise HTTPException(status_code=404, detail="User not found.")
+    
+    return {
+        "status": "authenticated", 
+        "user_id": str(user.id),
+        "email": user.email,
+        "message": "Welcome to PULSE. You are securely logged in."
     }
