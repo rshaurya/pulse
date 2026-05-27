@@ -14,7 +14,7 @@ class User(SQLModel, table=True):
     encrypted_llm_api_key: Optional[str] = None
     encrypted_tavily_api_key: Optional[str] = None
     
-    created_at: datetime = Field(default_factory=lambda: datetime.now(timezone.utc))
+    created_at: datetime = Field(default_factory=lambda: datetime.now(timezone.utc).replace(tzinfo=None))
 
 class UserProfile(SQLModel, table=True):
     """The dynamic 'Brain' for a user."""
