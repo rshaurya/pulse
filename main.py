@@ -11,6 +11,8 @@ from apscheduler.triggers.cron import CronTrigger
 from qdrant_client import AsyncQdrantClient
 
 from core.config import settings
+from core.models import SQLModel
+from core.database import engine
 
 from services.llm import summarize_text, generate_embedding
 from services.qdrant import initialize_collection, insert_document
@@ -32,6 +34,11 @@ async def lifespan(app: FastAPI):
     print("[SYSTEM] Booting up PULSE Automation Heartbeat...")
     
     await initialize_collection()
+    
+    print("[DATABASE] Ensuring PostgreSQL tables exist...")
+    async with engine.begin() as conn:
+        # This looks at models.py and automatically creates the tables if they don't exist!
+        await conn.run_sync(SQLModel.metadata.create_all)
     
     # THE SCHEDULE: 
     # For testing right now, we will set it to run every 2 minutes.
