@@ -26,6 +26,7 @@ from services.rss_fetcher import fetch_all_rss_feeds
 from services.processor import process_and_store_articles
 from services.crawler import fetch_and_extract_url
 from services.orchestrator import run_autonomous_crawler
+from services.email import send_magic_link_email
 
 from scripts.dispatcher import generate_daily_digest
 
@@ -281,6 +282,7 @@ async def trigger_autonomous_crawler(background_tasks: BackgroundTasks):
 @app.post("/api/auth/request")
 async def request_magic_link(
     payload: MagicLinkRequest, 
+    background_tasks: BackgroundTasks,
     session: AsyncSession = Depends(get_session)
 ):
     """Generates the VIP pass and 'emails' it to the user."""
@@ -316,7 +318,10 @@ async def request_magic_link(
     # right now, print it to the terminal so we can click it
     print(f"\\n{'='*50}\\n[MAGIC LINK FOR {email}]:\\n{magic_link}\\n{'='*50}\\n")
     
+    background_tasks.add_task(send_magic_link_email, email, magic_link)
+    
     return {"status": "success", "message": "Check your email for the magic link!"}
+    
 
 
 @app.get("/api/auth/verify")
