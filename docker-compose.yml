@@ -1,4 +1,4 @@
-version: '3.8'
+# version: '3.8'
 
 services:
   pulse-engine:
@@ -8,8 +8,24 @@ services:
       - "8000:8000"
     env_file:
       - .env
+    depends_on:
+      - postgres_db
     volumes:
       - ./user_profile.json:/app/user_profile.json
+    restart: unless-stopped
+
+  postgres_db:
+    image: postgres:15-alpine
+    container_name: pulse-postgres
+    environment:
+      # In production, pull these values from a secure .env file, 
+      POSTGRES_USER: postgres
+      POSTGRES_PASSWORD: passwd123
+      POSTGRES_DB: pulse_db
+    ports:
+      - "5432:5432"
+    volumes:
+      - pulse_pg_data:/home/shaurya/.docker-data
     restart: unless-stopped
     
   # If someone wants to run Qdrant locally instead of the cloud, 
@@ -20,3 +36,6 @@ services:
   #     - "6333:6333"
   #   volumes:
   #     - ./qdrant_data:/qdrant/storage
+
+volumes:
+  pulse_pg_data:
