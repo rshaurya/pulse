@@ -39,8 +39,12 @@ def load_user_profile():
 print("[SYSTEM] Booting CPU Vector Engine (FastEmbed)...")
 embedding_model = TextEmbedding(model_name="BAAI/bge-small-en-v1.5")
 
-async def summarize_text(text: str) -> str:
+async def summarize_text(text: str, api_key: str) -> str:
     """Sends the text to Groq API and returns a personalised summary."""
+    
+    if not api_key:
+        raise ValueError("Cannot summarize: User has not configured an LLM API key.")
+        
     print("[LLM] Generating context-aware summary via Groq...")
     
     profile = load_user_profile()
@@ -75,7 +79,7 @@ async def summarize_text(text: str) -> str:
     # Inject the API key into the headers
     headers = {"Content-Type": "application/json"}
     if settings.LLM_API_KEY:
-        headers["Authorization"] = f"Bearer {settings.LLM_API_KEY}"
+        headers["Authorization"] = f"Bearer {api_key}"
     
     # We can drop the timeout back down to 30s because Cloud APIs don't have "cold boots"!
     # async with httpx.AsyncClient(timeout=30.0) as client:
