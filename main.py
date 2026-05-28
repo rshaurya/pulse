@@ -15,7 +15,7 @@ from sqlmodel.ext.asyncio.session import AsyncSession
 from core.config import settings
 from core.models import SQLModel, User, UserProfile
 from core.database import engine, get_session
-from core.security import create_magic_token, verify_magic_token
+from core.security import create_magic_token, verify_magic_token, encrypt_api_key
 
 from services.llm import summarize_text, generate_embedding
 from services.qdrant import initialize_collection, insert_document
@@ -98,6 +98,12 @@ class MasterIngestPayload(BaseModel):
 class MagicLinkRequest(BaseModel):
     email: str
 
+class UserSettingsUpdate(BaseModel):
+    """The payload a user sends to update their brain and API vaults."""
+    llm_api_key: Optional[str] = None
+    tavily_api_key: Optional[str] = None
+    core_interests: Optional[List[str]] = None
+    rss_feeds: Optional[List[str]] = None
 
 # API Endpoints
 
@@ -346,4 +352,51 @@ async def verify_login(token: str, session: AsyncSession = Depends(get_session))
         "user_id": str(user.id),
         "email": user.email,
         "message": "Welcome to PULSE. You are securely logged in."
+    }
+    
+@app.patch("/api/users/{user_id}/settings")
+async def update_user_settings(
+    user_id: str, 
+    payload: UserSettingsUpdate, 
+    session: AsyncSession = Depends(get_session)
+):
+    """Securely updates a user's API keys (encrypted) and AI interests."""
+    
+    # Verify the user exists
+    statement = select(User).where(User.id == user_id)
+    result = await session.exec(statement)
+    user = result.one_or_none()
+    
+    if not user:
+        raise HTTPException(status_code=404, detail="User not found.")
+        
+    # Fetch their specific JSON profile
+    profile_statement = select(UserProfile).where(UserProfile.user_id == user.id)
+    profile_result = await session.exec(profile_statement)
+    profile = profile_result.one_or_none()
+    
+    # Encrypt and Vault the API Keys (If provided)
+    # Notice we NEVER store the plaintext payload directly!
+    if payload.llm_api_key:
+        print(f"[SECURITY] Encrypting new LLM API Key for {user.email}")
+        user.encrypted_llm_api_key = encrypt_api_key(payload.llm_api_key)
+        
+    if payload.tavily_api_key:
+        print(f"[SECURITY] Encrypting new Tavily API Key for {user.email}")
+        user.encrypted_tavily_api_key = encrypt_api_key(payload.tavily_api_key)
+        
+    # Update the JSON profile (If provided)
+    if payload.core_interests is not None:
+        profile.core_interests = payload.core_interests
+    if payload.rss_feeds is not None:
+        profile.rss_feeds = payload.rss_feeds
+        
+    # Commit the transaction to PostgreSQL
+    session.add(user)
+    session.add(profile)
+    await session.commit()
+    
+    return {
+        "status": "success", 
+        "message": "Vault and Brain successfully updated."
     }
