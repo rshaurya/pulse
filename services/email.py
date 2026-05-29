@@ -4,14 +4,15 @@ from email.mime.text import MIMEText
 from email.mime.multipart import MIMEMultipart
 from core.config import settings
 
-def send_daily_digest(articles: list[dict]):
+def send_daily_digest(articles: list[dict], to_email: str, user_id: str):
     """Formats and sends the top Qdrant articles as an HTML email digest."""
+    
     print(f"[EMAIL] Formatting digest for {len(articles)} articles...")
     
     msg = MIMEMultipart("alternative")
     msg["Subject"] = "🧠 PULSE: Your Daily Technical Digest"
     msg["From"] = settings.SMTP_USERNAME
-    msg["To"] = settings.USER_EMAIL
+    msg["To"] = to_email
     
     # The Base URL where your FastAPI server is running (e.g., your DigitalOcean IP or localhost)
     # We need this so the feedback buttons know where to send the click data!
@@ -48,13 +49,13 @@ def send_daily_digest(articles: list[dict]):
                 </div>
                 
                 <div style="margin-top: 20px; border-top: 1px solid #e1e4e8; padding-top: 15px;">
-                    <a href="{BASE_URL}/api/feedback?doc_id={doc_id}&action=explore" 
+                    <a href="{BASE_URL}/api/feedback?doc_id={doc_id}&user_id={user_id}&action=explore" 
                     style="background-color: #28a745; color: white; padding: 10px 15px; text-decoration: none; border-radius: 5px; font-size: 13px; font-weight: bold; margin-right: 10px;">
-                    📈 I like this. Explore more
+                    📈 I like this
                     </a>
-                    <a href="{BASE_URL}/api/feedback?doc_id={doc_id}&action=prune" 
+                    <a href="{BASE_URL}/api/feedback?doc_id={doc_id}&user_id={user_id}&action=prune" 
                     style="background-color: #d73a49; color: white; padding: 10px 15px; text-decoration: none; border-radius: 5px; font-size: 13px; font-weight: bold;">
-                    📉 Not much to my liking :(
+                    📉 not interested
                     </a>
                 </div>
             </div>
