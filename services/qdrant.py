@@ -15,10 +15,7 @@ async def initialize_collection():
         api_key=settings.QDRANT_API_KEY
     )
     
-    # THE SRE FIX: Ask for the guest list instead of relying on try/except!
     response = await db_client.get_collections()
-    
-    # Extract just the names of the collections into a simple Python list
     existing_collections = [col.name for col in response.collections]
     print(f"[QDRANT] Existing collections: {existing_collections}")
     
@@ -31,18 +28,23 @@ async def initialize_collection():
                 distance=models.Distance.COSINE
             )
         )
-        
-        print("[QDRANT] Building Payload Index for 'emailed' field...")
+    else:
+        print("[QDRANT] Collection already exists. Skipping creation.")
+
+    try:
+        print("[QDRANT] Building/Verifying Payload Index for 'user_id'...")
         await db_client.create_payload_index(
             collection_name=settings.COLLECTION_NAME,
-            field_name="emailed",
-            field_schema=models.PayloadSchemaType.BOOL,
+            field_name="user_id",
+            field_schema=models.PayloadSchemaType.KEYWORD,
         )
-        print("[QDRANT] Initialization complete.")
-    else:
-        print(f"[QDRANT] Collection '{settings.COLLECTION_NAME}' verified and ready for ingestion.")
+        print("[QDRANT] Index active.")
+    except Exception as e:
+        # If Qdrant says "Index already exists", it throws an error. 
+        # can safely catch and ignore it 
+        pass
 
-async def insert_document(title: str, url: str, text: str, summary: str, embedding: list[float]) -> str:
+async def insert_document(title: str, url: str, text: str, summary: str, embedding: list[float], user_id: str) -> str:
     """Inserts a vectorized document and its metadata into the database."""
     
     print(f"[QDRANT] Storing document: {title[:30]}...")
@@ -65,7 +67,8 @@ async def insert_document(title: str, url: str, text: str, summary: str, embeddi
                     "url": url,
                     "raw_text": text,
                     "summary": summary,
-                    "emailed": False 
+                    "emailed": False,
+                    "user_id": user_id
                 }
             }
         ]
