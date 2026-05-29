@@ -46,13 +46,13 @@ async def lifespan(app: FastAPI):
     
     # THE SCHEDULE: 
     # For testing right now, we will set it to run every 2 minutes.
-    scheduler.add_job(
-        generate_daily_digest, 
-        trigger='interval', 
-        minutes=2, 
-        id="test_digest_job",
-        replace_existing=True
-    )
+    # scheduler.add_job(
+    #     generate_daily_digest, 
+    #     trigger='interval', 
+    #     minutes=2, 
+    #     id="test_digest_job",
+    #     replace_existing=True
+    # )
 
     # uncomment below line and comment the above scheduler.add_job in prod
     # scheduler.add_job(generate_daily_digest, trigger=CronTrigger(hour=7, minute=0), id="daily_digest_job")
@@ -225,52 +225,56 @@ async def ingest_url_endpoint(payload: URLPayload):
 
 # Endpoint to receive user feedback from email interactions and update the user_profile.json accordingly
 @app.get("/api/feedback", response_class=HTMLResponse)
-
-async def register_feedback(doc_id: str = Query(...), action: str = Query(...)):
-    """Webhook to receive user feedback directly from the email digest."""
-    
-    print(f"[WEBHOOK] Received feedback: {action} for Document ID: {doc_id}")
-    
-    client = AsyncQdrantClient(url=settings.QDRANT_URL, api_key=settings.QDRANT_API_KEY)
-    
+async def handle_feedback(
+    doc_id: str = Query(...), 
+    action: str = Query(...), 
+    user_id: str = Query(...), 
+    session: AsyncSession = Depends(get_session)
+):
+    """Webhooks for the email buttons to organically tune the user's AI brain in PostgreSQL."""
     try:
-        points = await client.retrieve(
-            collection_name=settings.COLLECTION_NAME,
-            ids=[doc_id],
-            with_payload=True
-        )
+        # Fetch the specific user's brain from PostgreSQL
+        statement = select(UserProfile).where(UserProfile.user_id == user_id)
+        result = await session.exec(statement)
+        profile = result.one_or_none()
+
+        if not profile:
+            return "<html><body><h3>User profile not found.</h3></body></html>"
+
+        # Fetch the article's title from Qdrant to know WHAT TF we are tuning
+        q_client = AsyncQdrantClient(url=settings.QDRANT_URL, api_key=settings.QDRANT_API_KEY)
+        points = await q_client.retrieve(collection_name=settings.COLLECTION_NAME, ids=[doc_id])
         
         if not points:
-            return "<html><body><h3>Error: Article not found in database.</h3></body></html>"
+            return "<html><body><h3>Article not found in database.</h3></body></html>"
             
         article_title = points[0].payload.get("title", "this topic")
-        
-        profile_path = os.path.join(os.path.dirname(__file__), "user_profile.json")
-        with open(profile_path, "r") as f:
-            profile = json.load(f)
-            
-        # adjust the user_profile.json based on the click
+
+        # Update the PostgreSQL JSONB arrays (Re-assigning to trigger DB update)
         if action == "explore":
-            # Add it to focus areas if it isn't already there
-            if article_title not in profile["summary_preferences"]["focus_areas"]:
-                profile["summary_preferences"]["focus_areas"].append(article_title)
-            response_text = f"<h3>Feedback Logged!</h3><p>PULSE will actively hunt for more technical depth regarding: <b>{article_title}</b></p>"
+            if article_title not in profile.focus_areas:
+                # We add lists together instead of using .append() to force SQLModel to register the change!
+                profile.focus_areas = profile.focus_areas + [article_title] 
+            
+            response_text = f"<h3>Feedback Logged!</h3><p>PULSE will actively hunt for more technical depth regarding: <br><b>{article_title}</b></p>"
             
         elif action == "prune":
-            # Add a strict negative constraint to the system prompt
-            if "avoid_topics" not in profile["summary_preferences"]:
-                profile["summary_preferences"]["avoid_topics"] = []
-            if article_title not in profile["summary_preferences"]["avoid_topics"]:
-                profile["summary_preferences"]["avoid_topics"].append(article_title)
-            response_text = f"<h3>Topic Pruned.</h3><p>PULSE will filter out articles related to: <b>{article_title}</b></p>"
+            if article_title not in profile.avoid_topics:
+                profile.avoid_topics = profile.avoid_topics + [article_title]
+                
+            response_text = f"<h3>Topic Pruned.</h3><p>PULSE will filter out future articles related to: <br><b>{article_title}</b></p>"
             
-        with open(profile_path, "w") as f:
-            json.dump(profile, f, indent=4)
-            
-        return f"<html><body style='font-family: sans-serif; padding: 40px; text-align: center;'>{response_text}</body></html>"
-        
+        else:
+            return "<html><body><h3>Invalid action.</h3></body></html>"
+
+        # Commit the newly tuned brain back to db
+        session.add(profile)
+        await session.commit()
+
+        return f"<html><body style='font-family: -apple-system, BlinkMacSystemFont, sans-serif; padding: 40px; text-align: center; color: #333;'>{response_text}</body></html>"
+
     except Exception as e:
-        print(f"[WEBHOOK] CRITICAL ERROR: {e}")
+        print(f"[WEBHOOK ERROR] Failed to process feedback for user {user_id}: {e}")
         return "<html><body><h3>System Error logging feedback.</h3></body></html>"
 
 @app.post("/api/ingest/autonomous")
