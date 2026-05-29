@@ -17,10 +17,30 @@ async def process_and_store_articles(articles: list[dict], user_id: str, llm_api
                 raw_text = raw_text[:14000] + "... [TRUNCATED]"
             
             # Pass the decrypted API key to your LLM function
-            summary = await summarize_text(raw_text, llm_api_key)
-            embedding = await generate_embedding(summary)
+            summary = "Summary failed due to rate limits." # Default fallback
+            max_retries = 3
+            
+            for attempt in range(max_retries):
+                try:
+                    summary = await summarize_text(raw_text, llm_api_key)
+                    break # Success! Break out of the retry loop.
+                except Exception as e:
+                    if "429" in str(e):
+                        # Calculate backoff: 10s, 20s, 40s
+                        wait_time = 10 * (2 ** attempt) 
+                        print(f"   [RATE LIMIT] Groq is throttling us. Backing off for {wait_time} seconds...")
+                        await asyncio.sleep(wait_time)
+                        if attempt == max_retries - 1:
+                            print(f"   [ABORT] Max retries hit for '{article.get('title')}'. Saving without summary.")
+                    else:
+                        print(f"   [LLM ERROR] Non-429 error: {e}")
+                        break # Break loop if it's a different kind of error (like an invalid API key)
+
+            print(f"\n--- AI Summary Preview ---\n{summary[:100]}...\n--------------------------\n")
             
             full_payload_text = f"Title: {article.get('title')}\nURL: {article.get('url')}\nContent: {raw_text}"
+            
+            embedding = await generate_embedding(summary)
             
             # attach the user_id to the Qdrant payload!
             await insert_document(
