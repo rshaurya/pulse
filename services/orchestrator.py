@@ -120,10 +120,13 @@ async def run_autonomous_crawler():
                 print(f"[ABORT] No valid articles survived for {user.email}.")
                 continue
             
+            topics = profile.core_interests + profile.focus_areas
+            context_string = ", ".join(topics)
+            
             # PROCESSING PHASE
             print(f"[PHASE 3] Summarizing and Vaulting data for {user.email}...")
             # Hand the decrypted LLM key to the processor so Groq bills the user, not you!
-            await process_and_store_articles(final_articles, user_id=user.id, llm_api_key=llm_key)
+            await process_and_store_articles(final_articles, user_id=user.id, llm_api_key=llm_key, user_context=context_string)
             
             print(f"[PHASE 4] Dispatching digest for {user.email}...")
             await generate_daily_digest(user.id, user.email)

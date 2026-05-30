@@ -2,7 +2,7 @@ import asyncio
 from services.llm import summarize_text, generate_embedding
 from services.qdrant import insert_document
 
-async def process_and_store_articles(articles: list[dict], user_id: str, llm_api_key: str):
+async def process_and_store_articles(articles: list[dict], user_id: str, llm_api_key: str, user_context: str = ""):
     """Background worker that processes raw articles and stores them in Qdrant for a specific user."""
     
     print(f"\n[BACKGROUND WORKER] Processing {len(articles)} articles for User {user_id}...")
@@ -22,7 +22,7 @@ async def process_and_store_articles(articles: list[dict], user_id: str, llm_api
             
             for attempt in range(max_retries):
                 try:
-                    summary = await summarize_text(raw_text, llm_api_key)
+                    summary = await summarize_text(raw_text, llm_api_key, user_context)
                     break # Success! Break out of the retry loop.
                 except Exception as e:
                     if "429" in str(e):
