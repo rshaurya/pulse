@@ -58,7 +58,8 @@ async def generate_daily_digest(user_id: str, user_email: str):
                 must_not=must_not_conditions
             ),
             limit=5, # Top 5 articles a day
-            with_payload=True
+            with_payload=True,
+            score_threshold=0.40
         )
 
         if not search_results:
