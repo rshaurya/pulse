@@ -38,4 +38,3 @@ class ArticleState(SQLModel, table=True):
     qdrant_doc_id: str = Field(index=True) 
     
     emailed: bool = Field(default=False)
-    feedback_given: Optional[str] = Field(default=None) # e.g., 'explore', 'prune'
