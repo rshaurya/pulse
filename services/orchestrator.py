@@ -92,14 +92,20 @@ async def run_autonomous_crawler():
             print(f"[PHASE 1] Discovering URLs for {user.email}...")
             search_tasks = [fetch_urls_for_topic(topic, tavily_key) for topic in topics] if tavily_key else []
             paper_tasks = [fetch_latest_papers(topic) for topic in topics]
+            rss_tasks = [fetch_all_rss_feeds(rss_feeds, max_per_feed=2)] if rss_feeds else []
             
             discovered_url_lists = await asyncio.gather(*search_tasks, return_exceptions=True)
             discovered_papers_lists = await asyncio.gather(*paper_tasks, return_exceptions=True)
+            discovered_rss_lists = await asyncio.gather(*rss_tasks, return_exceptions=True)
             
             target_urls = []
             for url_list in discovered_url_lists:
                 if isinstance(url_list, list):
                     target_urls.extend(url_list)
+                    
+            for rss_list in discovered_rss_lists:
+                if isinstance(rss_list, list):
+                    target_urls.append(rss_list)
 
             # EXTRACTION PHASE
             print(f"[PHASE 2] Extracting Text for {user.email}...")
