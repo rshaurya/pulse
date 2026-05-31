@@ -2,29 +2,45 @@
 
 PULSE is a self-hosted, continuous-learning recommendation engine. It is your personal autonomous researcher, waking up daily, hunting the web and academic journals for content tailored to your exact interests, summarizing the noise, and delivering a highly personalized digest straight to your inbox.
 
-## 📖 The Story Behind PULSE
+**Link of PULSE goes here**
+
+## The Story Behind PULSE
 
 Keeping up with tech and AI research right now feels overwhelming (atleast for me).
 
-Every day, there are lots of new papers, hundreds of blog posts, and thousands of tweets. I built PULSE because I was suffering from severe information overload. I didn't want to spend 2 hours a day scrolling through X or HackerNews trying to find signal in the noise. I wanted a machine to do it for me. 
+Every day, there are lots of new papers, hundreds of blog posts, and thousands of tweets. I built PULSE because I was suffering from information overload. I didn't want to spend 2 hours a day scrolling through X or Reddit or the news trying to keep up with the industry. I wanted to automate it. 
 
-I didn't want a generic newsletter. I wanted an AI that deeply understood *my* *specific* current interests, read the internet for me, dropped the garbage content, and gave me just the technical abstracts I actually needed to learn (And I couldn't find a good resource to stay updated, if you are using something like that, please let me know). That's how PULSE was born.  
+I didn't go with news letters because I thought that I'll still miss something lol. I wanted information according to *my* *specific* current interests. (And I couldn't find a good resource to stay updated, if you are using something like that, please let me know). That's how PULSE was born. 
 
-## 🎯 Who is this for? (v0.1 Personal Edition)
+## v0.2 Upgrades  
+The v0.2 release focuses on system resilience, data security, and multi-tenant scaling.
+* **Passwordless Authentication:** Implemented a secure Magic Link (JWT) login system to eliminate password fatigue and securely establish user sessions.
+* **API Encryption:** Third-party API keys (Groq, Tavily) are not stored in plain text. They are secured in PostgreSQL using an **AES-128 Fernet Encryption Engine** and are only decrypted into memory during a user's specific processing loop.
+* **Decoupled Orchestration:** Ingestion (write path) and Retireval (read path) are fully separated. 
+  * **2:00 AM UTC:** The autonomous crawler wakes up, decrypts keys, sends out API requests (RSS, OpenAlex, Tavily, Groq), processes embeddings, and stores vectors.
+  * **6:00 AM UTC:** The Dispatcher wakes up, runs a semantic similarity search against Qdrant, filters out previously sent articles via a PostgreSQL ledger, and dispatches the email.
+* **Resilient LLM Pipelines:** Built with Fault Isolation and Exponential Backoff in order to handle LLM provider rate limits (429s) without crashing the ingestion server.
+* **Concept Drift (Sliding Window):** The user's  "brain" dynamically tunes itself based on feedback via email webhooks. To prevent LLM prompt bloat, the PostgreSQL arrays use a sliding window, automatically forgetting old interests as new ones are explored.
+* **Semantic Gatekeeping:** Qdrant payload indexing (`user_id` as KEYWORD) guarantees O(1) lookup speeds, and a `0.40` Cosine Similarity threshold ensures the system refuses to send irrelevant articles.
 
-Currently, PULSE is heavily geared toward **Developers and Researchers, tech people in general**. 
+## Tech Stack
+* **API Framework:** FastAPI (Python 3.11)
+* **Relational Database:** PostgreSQL & SQLModel (Connection Pooled)
+* **Vector Database:** Qdrant (Semantic Search & Payloads)
+* **Embeddings:** FastEmbed (384-dimensional vectors, running locally on CPU)
+* **LLM Engine:** Groq API (Llama-3 for high-speed, low-cost summarization)
+* **Task Scheduling:** APScheduler (Async Background Workers)
+* **Infrastructure:** Docker & Docker Compose (Deployed on DigitalOcean)
 
-Because this is the "Personal Edition" (v0.1), there is no graphical user interface (GUI) yet. You configure your "brain" using a local JSON file, and you boot the engine using Docker. If you are comfortable with `.env` files, API keys, and terminals, you can have this running on your local machine in a few minutes.
+## Past versions
+
+* **v0.1 - The Personal Edition:** was geared toward people who were comfortable with local env setups. It lacked a GUI. One had to configure your "brain" using a local JSON file, and then boot the engine using Docker. This version had `.env` files, API keys, etc. and PULSE would run on their local machine.   
+
+* **v0.2:** is for everyone :) v0.2 has a UI and is deployed fully. Other architectural upgrades are mentioned above.  
 
 ---
 
-## ⚙️ How to Use PULSE
-
-### The Tech Stack
-* **Backend:** FastAPI (Python)
-* **LLM Engine:** Groq
-* **Vector Database:** Qdrant
-* **Discovery:** Tavily API & OpenAlex API
+## How to Use PULSE
 
 ### Quick Start Setup
 
@@ -35,81 +51,84 @@ cd pulse
 ```
 
 **2. Configure the Environment**  
-Rename the `.env_template` file to `.env` and fill in your API keys (Groq, Tavily, Qdrant) and your SMTP Email credentials.
+Rename the `.env_template` file to `.env` and fill in your API keys (Groq, Tavily, Qdrant) and your SMTP Email credentials. And a newly generated 32-byte Base64 string for your ENCRYPTION_KEY (to lock the Fernet Vault).  
 
-**3. Define your Brain**  
-Open `user_profile.json` and type in your core technical interests, your specific focus areas, any RSS feeds you want PULSE to monitor with other details mentioned in the file.
-
-**4. Boot the Engine**
+**3. Boot the Infrastructure**  
+Spin up the FastAPI server and the PostgreSQL database in the background:
 ```bash
-docker-compose up -d --build
+docker compose up -d --build
 ```
-PULSE will now run in the background. The internal scheduler will automatically trigger the crawler based on your code settings.
 
-## 📂 File System Architecture
+**4. Authenticate via Magic Link**
+- Navigate to `http://localhost:8000/docs` in your browser.  
+- Locate the `POST /api/auth/request` endpoint and enter your email address.  
+- Check your terminal logs (or your email inbox) for the secure Magic Link. Click it to verify your session and generate your unique `user_id`.  
+
+**5. Configure Your Brain**
+- In the Swagger UI, locate the `PATCH /api/users/{user_id}/settings` endpoint.  
+- Input your `user_id` and pass a JSON payload containing your personal Groq/Tavily API keys and an array of your `core_interests`.
+- Note: Your API keys are instantly encrypted via AES-128 before saving to PostgreSQL.  
+
+**6. Trigger the Engine**
+By default, the internal APScheduler will run the Master Crawler at 2:00 AM UTC and the Email Dispatcher at 8:00 AM UTC.  
+To test it immediately, manually trigger the `POST /api/ingest/autonomous` endpoint in Swagger UI to watch the engine decrypt your keys, scour the web, summarize the findings, and vault the vectors into Qdrant.
+
+## File System Architecture
 For those looking under the hood, the architecture is modular:
 
 ```
 pulse/  
 │  
-├── core/                       # System Configurations  
+├── core/                       # System Configurations & Database Schemas
 │   ├── __init__.py  
-│   └── config.py               # Loads .env variables into a Pydantic Settings class  
+│   ├── config.py               # Loads .env variables into a strict Pydantic Settings class  
+│   ├── database.py             # PostgreSQL async engine and connection pooling
+│   ├── models.py               # SQLModel schemas (User, UserProfile with JSONB, ArticleState)
+│   └── security.py             # AES-128 Fernet Encryption Vault for API Keys
 │  
 ├── scripts/                    # Standalone/Background Jobs  
 │   ├── __init__.py  
-│   └── dispatcher.py           # Email dispatch script  
+│   └── dispatcher.py           # 8:00 AM Semantic Search & HTML Email Dispatcher
 │
-├── services/                   # The ETL Pipeline (Extract, Transform, Load)  
+├── services/                   # ETL Pipeline (Extract, Transform, Load)  
 │   ├── __init__.py  
-│   ├── crawler.py              # Single URL extraction   
-│   ├── discovery.py            # RSS feeds, papers and url extraction from the web  
-│   ├── email.py                # HTML formatting and SMTP dispatch  
-│   ├── llm.py                  # Groq summarization and embeddings  
-│   ├── openalex_fetcher.py     # Academic paper ingestion  
-│   ├── orchestrator.py         # The Autonomous Agent (Fan-Out/Fan-In logic)  
-│   ├── processor.py            # Sequential LLM processing   
-│   ├── qdrant.py               # Vector database logic  
-│   ├── rss_fetcher.py          # Asynchronous XML feed parsing  
-│   ├── scraper.py              # Extraction of text from a given url  
-│   └── web_search.py           # Tavily discovery integration  
+│   ├── crawler.py              # Trafilatura web crawling & HTML stripping (Circuit Breaker)
+│   ├── email.py                # SMTP dispatch & Passwordless Magic Link generation
+│   ├── llm.py                  # Groq API summarization & FastEmbed local vectorization
+│   ├── openalex_fetcher.py     # Academic paper ingestion track
+│   ├── orchestrator.py         # Multi-Tenant Autonomous Agent (Fan-Out/Fan-In logic)
+│   ├── processor.py            # Sequential LLM processing to prevent rate limits
+│   ├── qdrant.py               # Vector database initialization & Payload indexing
+│   ├── rss_fetcher.py          # Asynchronous XML feed parsing
+│   ├── scraper.py              # Asynchronous text extraction from url
+│   └── web_search.py           # Tavily discovery integration
 │  
-├── .env                        # Your actual API keys (DO NOT COMMIT to GitHub)  
-├── .env_template               # Blank template for new users to fill out  
+├── main.py                     # FastAPI entry point, Auth Webhooks, and APScheduler Clock
+├── .env                        # Master keys and DB passwords   
+├── .env_template               # Blank template for developers to fill out  
 ├── .gitignore                    
-├── docker-compose.yml          # Container orchestrator  
+├── .dockerignore                    
+├── docker-compose.yml          # Container orchestrator (FastAPI, Postgres)
 ├── Dockerfile                  # Container build instructions  
 ├── LICENSE                     # MIT License  
-├── main.py                     # FastAPI server  
 ├── README.md                   # Project story, architecture, and setup guide  
-├── requirements.txt            # Python dependencies  
-└── user_profile.json           # The dynamic AI "Brain" (Mapped via Docker Volume)  
+└── requirements.txt            # Python dependencies
 ```
 
-## 🚀 The Future of PULSE (v0.2 and Beyond)
-This v0.1 release is for people in the technical field. But I am already building the next version. PULSE will soon be available for everyone, irrespective of their field.
+## The Future of PULSE (v0.3 and Beyond)
+The below features will be implemented if user base becomes too large. 
 
 **Upcoming Features:**
 
-- Clean Frontend UI hosted on cloud. accessible to anyone.
+- With the web interface and core engine locked in, the next phase will focus on scaling: introducing Celery/Redis for distributed task queuing, and building a user analytics dashboard to visually map out how your interests have shifted over time.
 
-- PostgreSQL Integration: Keeping your API keys, personal profile and emails safe.
-
-- Weekly Batch Updates: A smarter, slower-moving recommendation algorithm to prevent recency bias.
-
-- And a few others I'm not able to name :)
-
-## 📬 Get Early Access to the Next Version
-If you are a non-technical user, or you just want to wait for the web app version of PULSE,  
-[Send me an email here](mailto:shaurya.r.pethe@gmail.com). I will notify you the moment the cloud version goes live. (the email donesn't have to be anything fancy. Just send the field you're working in or have interest in).
-
-## 🤝 Support & Feedback 
+## Support & Feedback 
 **Not getting the results you want?**  
 AI is unpredictable. If you are a researcher in a highly specific niche and PULSE isn't finding good articles or the summaries feel shallow, drop me an email at [shaurya.r.pethe@gmail.com](mailto:shaurya.r.pethe@gmail.com). I want to study your edge cases to make the extraction pipeline better.
 
 **Open Source Contributions:**  
-Currently, pull requests are closed because I will be  working on the features mentioned above for v0.2. 
-Code contributions will officially open with the release of v0.2.
+Contributions are most welcome. Please raise a detailed PR describing what it is that you would like to do (feature improvement, bug fix, new feature, etc.) 
 
-# 🙏 Thanks
-A massive thank you to the open-source communities behind FastAPI, Trafilatura, Qdrant, and the OpenAlex initiative for making this kind of autonomous knowledge curation possible.
+# Thanks
+A massive thank you to the open-source communities behind FastAPI, Trafilatura, Qdrant, and the OpenAlex initiative for making this kind of autonomous knowledge curation possible.  
+(and thanks to my coffee too)
