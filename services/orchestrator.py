@@ -17,7 +17,6 @@ from services.rss_fetcher import fetch_all_rss_feeds
 from services.processor import process_and_store_articles
 from services.web_search import fetch_urls_for_topic
 
-from scripts.dispatcher import generate_daily_digest
 
 async def safe_fetch_url(url: str) -> dict:
     """Wraps your crawler with a Circuit Breaker to prevent garbage data."""
@@ -127,8 +126,5 @@ async def run_autonomous_crawler():
             print(f"[PHASE 3] Summarizing and Vaulting data for {user.email}...")
             # Hand the decrypted LLM key to the processor so Groq bills the user, not you!
             await process_and_store_articles(final_articles, user_id=user.id, llm_api_key=llm_key, user_context=context_string)
-            
-            print(f"[PHASE 4] Dispatching digest for {user.email}...")
-            await generate_daily_digest(user.id, user.email)
             
     print("\n[AUTONOMOUS CRAWLER] Global run complete. Going back to sleep.")
