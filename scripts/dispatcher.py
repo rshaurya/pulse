@@ -6,7 +6,7 @@ from qdrant_client import AsyncQdrantClient
 from qdrant_client.http import models as qmodels
 
 from core.database import engine
-from core.models import UserProfile, ArticleState
+from core.models import User, UserProfile, ArticleState
 from core.config import settings
 
 from services.llm import generate_embedding
@@ -89,3 +89,26 @@ async def generate_daily_digest(user_id: str, user_email: str):
         # Commit updates to the database
         await session.commit()
         print(f"[DISPATCHER] Digest sent! PostgreSQL ledger updated for {user_email}.")
+        
+async def run_morning_dispatcher():
+    """Wakes up at 8 AM, finds all users, and sends them their personalized emails."""
+    print("[MORNING DISPATCHER] Waking up. Preparing daily emails...")
+    
+    async with AsyncSession(engine) as session:
+        # Fetch all active users
+        statement = select(User).where(User.encrypted_llm_api_key != None)
+        result = await session.exec(statement)
+        active_users = result.scalars().all()
+        
+        if not active_users:
+            print("[MORNING DISPATCHER] No active users found. Going back to sleep.")
+            return
+            
+        for user in active_users:
+            try:
+                # Trigger the email logic we already wrote!
+                await generate_daily_digest(user.id, user.email)
+            except Exception as e:
+                print(f"[DISPATCHER ERROR] Failed to send email to {user.email}: {e}")
+                
+    print("[MORNING DISPATCHER] All emails sent! See you tomorrow.")
