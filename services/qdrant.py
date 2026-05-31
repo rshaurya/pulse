@@ -74,36 +74,3 @@ async def insert_document(title: str, url: str, text: str, summary: str, embeddi
         ]
     )
     return doc_id
-
-async def search_documents(query_text: str, limit: int = 5):
-    """Embeds a search query and returns the closest matching articles from Qdrant."""
-    
-    db_client = client = AsyncQdrantClient(
-        url=settings.QDRANT_URL,
-        api_key=settings.QDRANT_API_KEY
-    )
-    
-    print(f"[QDRANT] Searching for: '{query_text}'...")
-    
-    # 1. Convert the human query into vector math
-    query_vector = await generate_embedding(query_text)
-    
-    # 2. Search the database
-    client = AsyncQdrantClient(
-        url=settings.QDRANT_URL,
-        api_key=settings.QDRANT_API_KEY 
-    )
-    
-    try:
-        results = await client.search(
-            collection_name=settings.COLLECTION_NAME,
-            query_vector=query_vector,
-            limit=limit,
-            with_payload=True # we need urls too
-        )
-        print(f"[QDRANT] Found {len(results)} relevant articles.")
-        return results
-    except Exception as e:
-        print(f"[QDRANT] Search failed: {e}")
-        return []
-    
