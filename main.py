@@ -7,7 +7,6 @@ from fastapi.responses import HTMLResponse
 from pydantic import BaseModel, HttpUrl
 from contextlib import asynccontextmanager
 from apscheduler.schedulers.asyncio import AsyncIOScheduler
-from apscheduler.triggers.cron import CronTrigger
 from qdrant_client import AsyncQdrantClient
 from sqlmodel import select
 from sqlmodel.ext.asyncio.session import AsyncSession
@@ -28,7 +27,7 @@ from services.crawler import fetch_and_extract_url
 from services.orchestrator import run_autonomous_crawler
 from services.email import send_magic_link_email
 
-from scripts.dispatcher import generate_daily_digest
+from scripts.dispatcher import run_morning_dispatcher
 
 scheduler = AsyncIOScheduler()
 
@@ -45,17 +44,13 @@ async def lifespan(app: FastAPI):
         await conn.run_sync(SQLModel.metadata.create_all)
     
     # THE SCHEDULE: 
-    # For testing right now, we will set it to run every 2 minutes.
-    # scheduler.add_job(
-    #     generate_daily_digest, 
-    #     trigger='interval', 
-    #     minutes=2, 
-    #     id="test_digest_job",
-    #     replace_existing=True
-    # )
+    # For testing you can set it to run every 2 minutes.
 
-    # uncomment below line and comment the above scheduler.add_job in prod
-    # scheduler.add_job(generate_daily_digest, trigger=CronTrigger(hour=7, minute=0), id="daily_digest_job")
+    scheduler.add_job(run_autonomous_crawler, 'cron', hour=2, minute=0)
+    print("[SYSTEM] 2 AM Autonomous Crawler scheduled successfully.")
+    
+    scheduler.add_job(run_morning_dispatcher, 'cron', hour=6, minute=0)
+    print("[SYSTEM] 6 AM Email Dispatcher scheduled successfully.")
     
     scheduler.start()
     print("[SYSTEM] Scheduler running. Waiting for next tick...")
@@ -254,7 +249,7 @@ async def handle_feedback(
         if action == "explore":
             if article_title not in profile.focus_areas:
                 # We add lists together instead of using .append() to force SQLModel to register the change!
-                profile.focus_areas = profile.focus_areas + [article_title] 
+                profile.focus_areas = (profile.focus_areas + [article_title])[-5:] 
             
             response_text = f"<h3>Feedback Logged!</h3><p>PULSE will actively hunt for more technical depth regarding: <br><b>{article_title}</b></p>"
             
