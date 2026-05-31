@@ -27,6 +27,6 @@ async def fetch_urls_for_topic(topic: str, api_key: str, max_results: int = 5) -
             # Extract just the URLs from the search results
             urls = [result["url"] for result in data.get("results", [])]
             return urls
-    except:
+    except Exception as e:
         print(f"[SEARCH ERROR] Tavily request failed: {e}")
         return []
