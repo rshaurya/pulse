@@ -6,7 +6,7 @@ pydantic==2.7.4
 pydantic-settings
 trafilatura==1.9.0
 python-dotenv==1.0.1
-fastembed==0.2.6
+fastembed
 hf-transfer==0.1.6
 qdrant-client==1.7.3
 markdown==3.5.2
