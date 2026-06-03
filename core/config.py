@@ -25,11 +25,7 @@ class Settings(BaseSettings):
     
     # Cloud LLM Settings
     LLM_BASE_URL: str = "http://localhost:11434/api/chat"
-    LLM_API_KEY: str | None = None
     LLM_MODEL: str = "phi3:mini" 
-    
-    # Web Search Config (Pipeline B)
-    TAVILY_API_KEY: str | None = None 
     
     # email settings
     SMTP_USERNAME: str | None = None
