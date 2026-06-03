@@ -1,84 +1,114 @@
 import asyncio
-import json
-import os
+from sqlmodel import select
+from sqlmodel.ext.asyncio.session import AsyncSession
 
 from qdrant_client import AsyncQdrantClient
-from qdrant_client.http import models
+from qdrant_client.http import models as qmodels
+
+from core.database import engine
+from core.models import User, UserProfile, ArticleState
 from core.config import settings
-from services.email import send_daily_digest
+
 from services.llm import generate_embedding
+from services.email import send_daily_digest
 
-async def generate_daily_digest():
-    print("[DISPATCHER] Waking up. Reading User Brain...")
-    
-    # 1. Load the dynamic user profile
-    profile_path = os.path.join(os.path.dirname(os.path.dirname(__file__)), "user_profile.json")
-    try:
-        with open(profile_path, "r") as f:
-            profile = json.load(f)
-    except Exception as e:
-        print(f"[DISPATCHER] FAILED to load user_profile.json: {e}")
-        return
+async def generate_daily_digest(user_id: str, user_email: str):
+    """Fetches unread articles from Qdrant, cross-references Postgres, and dispatches the email."""
+    print(f"\n[DISPATCHER] Assembling digest for {user_email}...")
 
-    # 2. Construct the "Persona Query"
-    interests = ", ".join(profile.get("core_interests", []))
-    focus = ", ".join(profile.get("summary_preferences", {}).get("focus_areas", []))
-    
-    query_text = f"Highly technical content regarding {interests}. Focus areas include: {focus}."
-    print(f"[DISPATCHER] Synthesizing Persona Vector for: '{query_text}'")
-    
-    # Convert your brain into a 384-dimensional mathematical coordinate
-    query_vector = await generate_embedding(query_text)
-    
-    client = AsyncQdrantClient(
-        url=settings.QDRANT_URL,
-        api_key=settings.QDRANT_API_KEY
-    )
-    
-    try:
-        print("[DISPATCHER] Hunting Qdrant Cloud for optimal semantic matches...")
-        
-        # 3. semantic search
-        results = await client.search(
-            collection_name=settings.COLLECTION_NAME,
-            query_vector=query_vector,
-            query_filter=models.Filter(
-                must=[
-                    models.FieldCondition(
-                        key="emailed",
-                        match=models.MatchValue(value=False) 
-                    )
-                ]
-            ),
-            limit=4,
-            with_payload=True
-        )
-        
-        if not results:
-            print("[DISPATCHER] No new relevant articles to send today.")
+    async with AsyncSession(engine) as session:
+        # Fetch the user's Brain from PostgreSQL
+        stmt_profile = select(UserProfile).where(UserProfile.user_id == user_id)
+        profile_result = await session.exec(stmt_profile)
+        profile = profile_result.one_or_none()
+
+        if not profile or not profile.core_interests:
+            print(f"[DISPATCHER] No core interests found for {user_email}. Skipping.")
             return
 
-        print(f"[DISPATCHER] Found {len(results)} highly relevant articles. Dispatching...")
-        
-        # print the "Score" (0.0 to 1.0) to see how perfectly it matches your profile!
-        for res in results:
-            print(f" -> Match Score: {res.score:.4f} | Title: {res.payload.get('title')}")
-        
-        articles_to_send = [{"id": res.id, "payload": res.payload} for res in results]
-        
-        # Dispatch the email
-        send_daily_digest(articles_to_send)
-        
-        point_ids = [res.id for res in results]
-        await client.set_payload(
-            collection_name=settings.COLLECTION_NAME,
-            payload={"emailed": True},
-            points=point_ids
+        # check what have we already sent them?
+        stmt_sent = select(ArticleState.qdrant_doc_id).where(
+            ArticleState.user_id == user_id,
+            ArticleState.emailed == True
         )
-        print("[DISPATCHER] Database updated. Articles marked as emailed.")
-        
-    except Exception as e:
-        print(f"[DISPATCHER] CRITICAL ERROR: {e}")
+        sent_result = await session.exec(stmt_sent)
+        already_sent_ids = sent_result.all()
 
-if __name__ == "__main__":
-    asyncio.run(generate_daily_digest())
+        # Search Qdrant for their topics
+        # FastEmbed runs locally on CPU, so we don't need to pass the Groq API key here!
+        search_query = " ".join(profile.core_interests + profile.focus_areas)
+        query_vector = await generate_embedding(search_query)
+        
+        client = AsyncQdrantClient(url=settings.QDRANT_URL, api_key=settings.QDRANT_API_KEY)
+        
+        # Build the Qdrant Filter: Must belong to this user, and MUST NOT be in the sent list
+        must_conditions = [
+            qmodels.FieldCondition(key="user_id", match=qmodels.MatchValue(value=str(user_id)))
+        ]
+        
+        must_not_conditions = []
+        if already_sent_ids:
+            must_not_conditions.append(qmodels.HasIdCondition(has_id=list(already_sent_ids)))
+
+        search_results = await client.search(
+            collection_name=settings.COLLECTION_NAME,
+            query_vector=query_vector,
+            query_filter=qmodels.Filter(
+                must=must_conditions,
+                must_not=must_not_conditions
+            ),
+            limit=5, # Top 5 articles a day
+            with_payload=True,
+            score_threshold=0.40
+        )
+
+        if not search_results:
+            print(f"[DISPATCHER] No new/unread articles found for {user_email}.")
+            return
+
+        # Format articles for the email and update the PostgreSQL db
+        articles_to_send = []
+        for point in search_results:
+            articles_to_send.append({
+                "id": point.id,
+                "payload": point.payload
+            })
+            
+            # Record that we are sending this article today
+            new_state = ArticleState(
+                user_id=user_id,
+                qdrant_doc_id=str(point.id),
+                emailed=True
+            )
+            session.add(new_state)
+
+        # Dispatch the email!
+        # Note: We pass user_id so the email buttons know who clicked them
+        send_daily_digest(articles_to_send, user_email, str(user_id))
+
+        # Commit updates to the database
+        await session.commit()
+        print(f"[DISPATCHER] Digest sent! PostgreSQL ledger updated for {user_email}.")
+        
+async def run_morning_dispatcher():
+    """Wakes up at 8 AM, finds all users, and sends them their personalized emails."""
+    print("[MORNING DISPATCHER] Waking up. Preparing daily emails...")
+    
+    async with AsyncSession(engine) as session:
+        # Fetch all active users
+        statement = select(User).where(User.encrypted_llm_api_key != None)
+        result = await session.exec(statement)
+        active_users = result.scalars().all()
+        
+        if not active_users:
+            print("[MORNING DISPATCHER] No active users found. Going back to sleep.")
+            return
+            
+        for user in active_users:
+            try:
+                # Trigger the email logic we already wrote!
+                await generate_daily_digest(user.id, user.email)
+            except Exception as e:
+                print(f"[DISPATCHER ERROR] Failed to send email to {user.email}: {e}")
+                
+    print("[MORNING DISPATCHER] All emails sent! See you tomorrow.")

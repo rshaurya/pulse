@@ -1,20 +1,7 @@
-import json
-import os 
 import httpx
 from fastembed import TextEmbedding
 from core.config import settings
 
-# 1. Load the profile into memory once when the server starts
-PROFILE_PATH = os.path.join(os.path.dirname(os.path.dirname(__file__)), 'user_profile.json')
-
-def load_user_profile():
-    profile_path = os.path.join(os.path.dirname(os.path.dirname(__file__)), "user_profile.json")
-    try:
-        with open(PROFILE_PATH, 'r') as f:
-            return json.load(f)
-    except FileNotFoundError:
-        print("[WARNING] user_profile.json not found. Using default persona.")
-        return {"name": "User", "technical_level": "general"}
 
 # USER_PROFILE = load_user_profile()
 
@@ -39,26 +26,24 @@ def load_user_profile():
 print("[SYSTEM] Booting CPU Vector Engine (FastEmbed)...")
 embedding_model = TextEmbedding(model_name="BAAI/bge-small-en-v1.5")
 
-async def summarize_text(text: str) -> str:
+async def summarize_text(text: str, api_key: str, user_context: str = "") -> str:
     """Sends the text to Groq API and returns a personalised summary."""
+    
+    if not api_key:
+        raise ValueError("Cannot summarize: User has not configured an LLM API key.")
+        
     print("[LLM] Generating context-aware summary via Groq...")
     
-    profile = load_user_profile()
+    system_prompt = "You are an elite technical research assistant. Your job is to summarize the provided text for this person.They want to know recent updates and increase their knowledge on the topic. "
     
-    system_prompt = f"""
-    You are an elite technical research assistant. Your job is to summarize the provided text for {profile.get('name')}.
-    They are at a {profile.get('technical_level')} level. 
-    Focus heavily on these core interests if they appear in the text: {', '.join(profile.get('core_interests', []))}.
-    When summarizing, adhere to these preferences: {profile.get('summary_preferences', {}).get('tone', 'Clear and concise.')}.
-    Highlight these specific areas if applicable: {', '.join(profile.get('summary_preferences', {}).get('focus_areas', []))}.
-    Look for any recent developments or insights that would be particularly relevant to their interests.
-    Make sure they don't miss out on any critical information that could impact their learning or projects in these areas.
-    """
+    if user_context:
+        system_prompt += f"Focus heavily on these core interests if they appear in the text: {user_context}. When summarizing, adhere to tjeir interests. Have a clear and concise tone. Highlight specific areas if applicable. Look for any recent developments or insights that would be particularly relevant to their interests. Make sure they don't miss out on any critical information that could impact their learning or projects in these areas"
     
-    headers = {
-        "Authorization": f"Bearer {settings.LLM_API_KEY}",
-        "Content-Type": "application/json"
-    }
+    
+    # headers = {
+    #     "Authorization": f"Bearer {settings.LLM_API_KEY}",
+    #     "Content-Type": "application/json"
+    # }
     
     # system_prompt = build_system_prompt()
     
@@ -67,7 +52,7 @@ async def summarize_text(text: str) -> str:
         "model": settings.LLM_MODEL,
         "messages": [
             {"role": "system", "content": system_prompt},
-            {"role": "user", "content": f"Summarize this:\n\n{text}"}
+            {"role": "user", "content": text}
         ],
         "temperature": 0.3 # Keep it low for factual summaries
     }
@@ -75,7 +60,7 @@ async def summarize_text(text: str) -> str:
     # Inject the API key into the headers
     headers = {"Content-Type": "application/json"}
     if settings.LLM_API_KEY:
-        headers["Authorization"] = f"Bearer {settings.LLM_API_KEY}"
+        headers["Authorization"] = f"Bearer {api_key}"
     
     # We can drop the timeout back down to 30s because Cloud APIs don't have "cold boots"!
     # async with httpx.AsyncClient(timeout=30.0) as client:

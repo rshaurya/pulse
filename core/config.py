@@ -38,6 +38,12 @@ class Settings(BaseSettings):
     SMTP_PORT: int = 587
     SMTP_PASSWORD: str | None = None
     
+    ENCRYPTION_MASTER_KEY: str
+    
+    DATABASE_URL: str
+    
+    JWT_SECRET_KEY: str
+    
 
 settings = Settings()
 

@@ -3,11 +3,20 @@ import json
 import asyncio
 from typing import List
 
+from sqlmodel.ext.asyncio.session import AsyncSession
+from sqlmodel import select
+from sqlalchemy.orm import sessionmaker
+
+from core.database import engine
+from core.models import User, UserProfile
+from core.security import decrypt_api_key
+
 from services.crawler import fetch_and_extract_url
 from services.openalex_fetcher import fetch_latest_papers
 from services.rss_fetcher import fetch_all_rss_feeds
 from services.processor import process_and_store_articles
 from services.web_search import fetch_urls_for_topic
+
 
 async def safe_fetch_url(url: str) -> dict:
     """Wraps your crawler with a Circuit Breaker to prevent garbage data."""
@@ -36,87 +45,92 @@ async def safe_fetch_url(url: str) -> dict:
         return None
 
 async def run_autonomous_crawler():
-    """The True Web Crawler: Reads the profile, hunts for data, and processes it."""
-    print("[AUTONOMOUS CRAWLER] Waking up. Reading User Brain...")
+    """Multi-Tenant Engine which loops through all users, decrypts keys and runs personalised pipelines"""
+    print("[AUTONOMOUS CRAWLER] Waking up. Fetching all active users from PostgreSQL...")
     
-    # 1. READ THE BRAIN
-    profile_path = os.path.join(os.path.dirname(os.path.dirname(__file__)), "user_profile.json")
-    try:
-        with open(profile_path, "r") as f:
-            profile = json.load(f)
-    except Exception as e:
-        print(f"[AUTONOMOUS CRAWLER] CRITICAL: Could not load user profile. {e}")
-        return
+    # Create a background database session
+    async_session = sessionmaker(engine, class_=AsyncSession, expire_on_commit=False)
+    
+    async with async_session() as session:
+        # Fetch all users who actually have an LLM API key saved
+        statement = select(User).where(User.encrypted_llm_api_key != None)
+        result = await session.execute(statement)
+        active_users = result.scalars().all()
+        
+        if not active_users:
+            print("[AUTONOMOUS CRAWLER] No active users with API keys found. Going back to sleep.")
+            return
 
-    # Combine core interests and focus areas
-    topics = profile.get("core_interests", []) + profile.get("summary_preferences", {}).get("focus_areas", [])
-    
-    # Let's assume you add an "rss_feeds" array to your JSON in the future. 
-    # For now, we default to an empty list if it's not there.
-    rss_feeds = profile.get("rss_feeds", []) 
-    
-    if not topics and not rss_feeds:
-        print("[AUTONOMOUS CRAWLER] No topics or feeds found in profile. Going back to sleep.")
-        return
+        print(f"[AUTONOMOUS CRAWLER] Found {len(active_users)} active users. Commencing extraction...")
 
-    print(f"[AUTONOMOUS CRAWLER] Hunting for topics: {topics}")
-
-    # 2. DISCOVERY PHASE: Find the URLs and Papers concurrently
-    print("[AUTONOMOUS CRAWLER] Phase 1: Discovery (Tavily & OpenAlex)...")
-    search_tasks = [fetch_urls_for_topic(topic, max_results=2) for topic in topics]
-    paper_tasks = [fetch_latest_papers(topic, max_results=2) for topic in topics]
-    
-    # Gather discovery results
-    discovered_url_lists = await asyncio.gather(*search_tasks, return_exceptions=True)
-    discovered_papers_lists = await asyncio.gather(*paper_tasks, return_exceptions=True)
-    
-    # Flatten the list of lists into a single list of URLs
-    target_urls = []
-    for url_list in discovered_url_lists:
-        if isinstance(url_list, list):
-            target_urls.extend(url_list)
-
-    # 3. EXTRACTION PHASE: Download the webpage text and RSS feeds
-    print(f"[AUTONOMOUS CRAWLER] Phase 2: Extraction. Fetching {len(target_urls)} URLs and {len(rss_feeds)} Feeds...")
-    url_fetch_tasks = [safe_fetch_url(url) for url in target_urls]
-    rss_task = fetch_all_rss_feeds(rss_feeds, max_per_feed=2) if rss_feeds else None
-    
-    url_results = await asyncio.gather(*url_fetch_tasks, return_exceptions=True)
-    
-    rss_results = []
-    if rss_task:
-        try:
-            rss_results = await rss_task
-        except Exception as e:
-            print(f"[RSS ERROR] {e}")
-
-    # 4. AGGREGATION & CIRCUIT BREAKERS
-    final_articles = []
-    
-    # Add surviving Web URLs
-    for res in url_results:
-        if isinstance(res, dict): 
-            final_articles.append(res)
+        # Loop through every user sequentially
+        # TODO: find a better method for search. this might break with large number of users
+        for user in active_users:
+            print(f"\n{'='*50}\n[CRAWLING FOR USER]: {user.email}\n{'='*50}")
             
-    # Add surviving Academic Papers
-    for paper_list in discovered_papers_lists:
-        if isinstance(paper_list, list):
-            for paper in paper_list:
-                if len(paper.get("abstract", "")) > 100:
-                    final_articles.append(paper)
+            # Fetch their Brain
+            profile_statement = select(UserProfile).where(UserProfile.user_id == user.id)
+            profile_result = await session.execute(profile_statement)
+            profile = profile_result.scalars().first()
+        
+            if not profile:
+                continue
 
-    # Add surviving RSS Feeds
-    for article in rss_results:
-        if len(article.get("content_snippet", "")) > 100:
-            final_articles.append(article)
+            # Decrypt their API keys
+            llm_key = decrypt_api_key(user.encrypted_llm_api_key)
+            tavily_key = decrypt_api_key(user.encrypted_tavily_api_key)
+            
+            # Combine core interests and focus areas
+            topics = profile.core_interests + profile.focus_areas
+            rss_feeds = profile.rss_feeds
+            
+            if not topics and not rss_feeds:
+                print(f"[SKIP] User {user.email} has no topics configured.")
+                continue
 
-    if not final_articles:
-        print("[AUTONOMOUS CRAWLER] No valid articles survived extraction. Aborting.")
-        return
+            # DISCOVERY PHASE (Pass the decrypted Tavily key)
+            print(f"[PHASE 1] Discovering URLs for {user.email}...")
+            search_tasks = [fetch_urls_for_topic(topic, tavily_key) for topic in topics] if tavily_key else []
+            paper_tasks = [fetch_latest_papers(topic) for topic in topics]
+            rss_tasks = [fetch_all_rss_feeds(rss_feeds, max_per_feed=2)] if rss_feeds else []
+            
+            discovered_url_lists = await asyncio.gather(*search_tasks, return_exceptions=True)
+            discovered_papers_lists = await asyncio.gather(*paper_tasks, return_exceptions=True)
+            discovered_rss_lists = await asyncio.gather(*rss_tasks, return_exceptions=True)
+            
+            target_urls = []
+            for url_list in discovered_url_lists:
+                if isinstance(url_list, list):
+                    target_urls.extend(url_list)
+                    
+            for rss_list in discovered_rss_lists:
+                if isinstance(rss_list, list):
+                    target_urls.append(rss_list)
 
-    print(f"[AUTONOMOUS CRAWLER] Extraction complete. {len(final_articles)} high-quality articles survived.")
-    
-    # 5. SEQUENTIAL PROCESSING (The LLM Summarizer)
-    print("[AUTONOMOUS CRAWLER] Handing over to sequential LLM processor...")
-    await process_and_store_articles(final_articles)
-    print("[AUTONOMOUS CRAWLER] Run complete. Going back to sleep.")
+            # EXTRACTION PHASE
+            print(f"[PHASE 2] Extracting Text for {user.email}...")
+            url_fetch_tasks = [safe_fetch_url(url) for url in target_urls]
+            url_results = await asyncio.gather(*url_fetch_tasks, return_exceptions=True)
+            
+            # Consolidate surviving articles
+            final_articles = []
+            for res in url_results:
+                if isinstance(res, dict): final_articles.append(res)
+            for paper_list in discovered_papers_lists:
+                if isinstance(paper_list, list):
+                    for paper in paper_list:
+                        if len(paper.get("abstract", "")) > 100: final_articles.append(paper)
+
+            if not final_articles:
+                print(f"[ABORT] No valid articles survived for {user.email}.")
+                continue
+            
+            topics = profile.core_interests + profile.focus_areas
+            context_string = ", ".join(topics)
+            
+            # PROCESSING PHASE
+            print(f"[PHASE 3] Summarizing and Vaulting data for {user.email}...")
+            # Hand the decrypted LLM key to the processor so Groq bills the user, not you!
+            await process_and_store_articles(final_articles, user_id=user.id, llm_api_key=llm_key, user_context=context_string)
+            
+    print("\n[AUTONOMOUS CRAWLER] Global run complete. Going back to sleep.")
