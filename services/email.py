@@ -70,7 +70,7 @@ def send_daily_digest(articles: list[dict], to_email: str, user_id: str):
     
     try:
         print("[EMAIL] Connecting to SMTP server...")
-        with smtplib.SMTP(settings.SMTP_SERVER, settings.SMTP_PORT) as server:
+        with smtplib.SMTP_SSL(settings.SMTP_SERVER, settings.SMTP_PORT) as server:
             server.starttls()
             server.login(settings.SMTP_USERNAME, settings.SMTP_PASSWORD)
             server.send_message(msg)
