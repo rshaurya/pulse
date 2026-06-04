@@ -71,7 +71,7 @@ def send_daily_digest(articles: list[dict], to_email: str, user_id: str):
     try:
         print("[EMAIL] Connecting to SMTP server...")
         with smtplib.SMTP_SSL(settings.SMTP_SERVER, settings.SMTP_PORT) as server:
-            server.starttls()
+            # server.starttls()
             server.login(settings.SMTP_USERNAME, settings.SMTP_PASSWORD)
             server.send_message(msg)
         print("[EMAIL] Digest successfully dispatched to inbox!")
@@ -108,8 +108,8 @@ def send_magic_link_email(to_email: str, magic_link: str):
     msg.attach(MIMEText(html_content, "html"))
     
     try:
-        with smtplib.SMTP(settings.SMTP_SERVER, settings.SMTP_PORT) as server:
-            server.starttls()
+        with smtplib.SMTP_SSL(settings.SMTP_SERVER, settings.SMTP_PORT) as server:
+            # server.starttls()
             server.login(settings.SMTP_USERNAME, settings.SMTP_PASSWORD)
             server.send_message(msg)
         print(f"[AUTH] Successfully sent Magic Link to {to_email}")
