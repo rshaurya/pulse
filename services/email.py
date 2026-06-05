@@ -108,10 +108,16 @@ def send_magic_link_email(to_email: str, magic_link: str):
     msg.attach(MIMEText(html_content, "html"))
     
     try:
-        with smtplib.SMTP_SSL(settings.SMTP_SERVER, settings.SMTP_PORT) as server:
-            # server.starttls()
+        # Use standard SMTP for Port 587
+        with smtplib.SMTP(settings.SMTP_SERVER, settings.SMTP_PORT) as server:
+            server.ehlo() 
+            server.starttls()
             server.login(settings.SMTP_USERNAME, settings.SMTP_PASSWORD)
             server.send_message(msg)
+            
         print(f"[AUTH] Successfully sent Magic Link to {to_email}")
+        
+    except smtplib.SMTPAuthenticationError as e:
+        print(f"[CRITICAL AUTH ERROR] Gmail rejected the login. Use an App Password! Details: {e}")
     except Exception as e:
-        print(f"[AUTH ERROR] Failed to send Magic Link: {e}")
+        print(f"[CRITICAL ERROR] The email function crashed: {str(e)}")
