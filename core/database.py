@@ -5,7 +5,14 @@ from core.config import settings
 
 # manages the connection pool to PostgreSQL.
 # echo=True prints the generated SQL to terminal to see how SQLModel works
-engine = create_async_engine(settings.DATABASE_URL, echo=True, future=True)
+engine = create_async_engine(settings.DATABASE_URL,
+                             echo=True,
+                             future=True,
+                             pool_pre_ping=True, # pre_ping checks if connections are alive before using them, helps avoid "connection is closed" errors.
+                             pool_recycle=300, # recycle connections after 5 minutes to prevent stale connections
+                             pool_size=5,
+                             max_overflow=10)  
+
 
 # 2. The Dependency: This is what FastAPI endpoints will use to talk to the DB.
 async def get_session() -> AsyncSession:
