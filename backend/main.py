@@ -63,7 +63,11 @@ app = FastAPI(title=settings.PROJECT_NAME, lifespan=lifespan)
 
 app.add_middleware(
     CORSMiddleware,
-    allow_origins=["http://localhost:3000", "https://www.pulse-ai.me/"], 
+    allow_origins=[
+        "http://localhost:3000",                  
+        "https://pulse-delta-inky.vercel.app",    
+        "https://pulse-ai.me",                    
+        "https://www.pulse-ai.me"], 
     allow_credentials=True,
     allow_methods=["*"], 
     allow_headers=["*"] # improve for production!
