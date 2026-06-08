@@ -4,7 +4,6 @@ import { useState, useCallback, useEffect } from 'react'
 import { Key, Brain, Save, Zap, LogOut, CheckCircle2, AlertCircle } from 'lucide-react'
 import PasswordInput from '@/components/PasswordInput'
 import TagInput, { type Tag } from '@/components/TagInput'
-import { updateProfile, fetchProfile } from '@/lib/api'
 
 // ─── Types ────────────────────────────────────────────────────────────────────
 type SaveStatus = 'idle' | 'saving' | 'saved' | 'error'
@@ -91,15 +90,42 @@ export default function DashboardPage() {
   const [saveStatus, setSaveStatus] = useState<SaveStatus>('idle')
   const [loading,    setLoading]    = useState(true)
 
-  // ── Fetch saved profile on mount ──
+// ── Fetch saved profile on mount ──
   useEffect(() => {
-    fetchProfile()
-      .then((data) => {
-        setTags(data.interests.map((label, i) => ({ id: String(i), label })))
-      })
-      .catch(() => {/* silently use defaults */})
-      .finally(() => setLoading(false))
-  }, [])
+    const loadProfile = async () => {
+      // 1. Grab the secure user_id from browser memory
+      const userId = typeof window !== 'undefined' ? localStorage.getItem('pulse_user_id') : null;
+      
+      if (!userId) {
+        setLoading(false);
+        return;
+      }
+
+      try {
+        // 2. Fetch the existing settings from FastAPI
+        const API_URL = process.env.NEXT_PUBLIC_API_URL || "http://localhost:8000";
+        const response = await fetch(`${API_URL}/api/users/${userId}/settings`);
+        
+        if (response.ok) {
+          const data = await response.json();
+          
+          // 3. Transform the raw strings from the database back into Tag objects for the UI
+          if (data.core_interests && Array.isArray(data.core_interests)) {
+            setTags(data.core_interests.map((label: string, i: number) => ({ 
+              id: String(i), 
+              label: label 
+            })));
+          }
+        }
+      } catch (error) {
+        console.error("Failed to load profile:", error);
+      } finally {
+        setLoading(false);
+      }
+    };
+
+    loadProfile();
+  }, []);
 
   // ── Helpers ──
   function markDirty() { setIsDirty(true) }
