@@ -335,7 +335,7 @@ async def request_magic_link(
     
     # Construct the Magic Link
     # In production, this will be frontend URL (e.g., https://pulse.com/verify?token=...)
-    magic_link = f"http://localhost:3000/verify?token={token}"
+    magic_link = f"https://pulse-ai.me/verify?token={token}"
     
     # TODO: email this link using services/email.py!
     # right now, print it to the terminal so we can click it
