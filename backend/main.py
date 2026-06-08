@@ -74,12 +74,20 @@ app.add_middleware(
 )
 
 @app.get("/")
-async def root():
-    return {
-        "status": "online", 
-        "message": f"Welcome to {settings.PROJECT_NAME}",
-        "llm_model": settings.LLM_MODEL
-    }
+@app.head("/")
+async def health_check():
+    """
+    Render Health Check Endpoint.
+    Prevents the platform from killing the container.
+    """
+    return {"status": "PULSE engine is online.", "version": "1.0.0"}
+
+# async def root():
+#     return {
+#         "status": "online", 
+#         "message": f"Welcome to {settings.PROJECT_NAME}",
+#         "llm_model": settings.LLM_MODEL
+#     }
 
 @app.get("/health")
 async def health_check():
