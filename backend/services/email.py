@@ -1,22 +1,18 @@
-import smtplib
+import os
+import resend
 import markdown
-from email.mime.text import MIMEText
-from email.mime.multipart import MIMEMultipart
 from core.config import settings
 
+# Initialize Resend with your API Key
+resend.api_key = os.environ.get("RESEND_API_KEY")
+
 def send_daily_digest(articles: list[dict], to_email: str, user_id: str):
-    """Formats and sends the top Qdrant articles as an HTML email digest."""
+    """Formats and sends the top Qdrant articles as an HTML email digest via Resend."""
     
     print(f"[EMAIL] Formatting digest for {len(articles)} articles...")
     
-    msg = MIMEMultipart("alternative")
-    msg["Subject"] = "🧠 PULSE: Your Daily Technical Digest"
-    msg["From"] = settings.SMTP_USERNAME
-    msg["To"] = to_email
-    
-    # The Base URL where your FastAPI server is running (e.g., your DigitalOcean IP or localhost)
-    # We need this so the feedback buttons know where to send the click data!
-    BASE_URL = "http://127.0.0.1:8000" 
+    # The Base URL where your FastAPI server is running (Your Vercel or Render domain in production)
+    BASE_URL = os.environ.get("https://pulse-gjxl.onrender.com")
 
     html_content = """
     <html>
@@ -27,9 +23,7 @@ def send_daily_digest(articles: list[dict], to_email: str, user_id: str):
     """
     
     for article in articles:
-        
         doc_id = article.get("id")
-        
         payload = article.get("payload", {})
         
         title = payload.get('title', 'Untitled Intelligence')
@@ -66,27 +60,22 @@ def send_daily_digest(articles: list[dict], to_email: str, user_id: str):
     </html>
     """
     
-    msg.attach(MIMEText(html_content, "html"))
-    
     try:
-        print("[EMAIL] Connecting to SMTP server...")
-        with smtplib.SMTP_SSL(settings.SMTP_SERVER, settings.SMTP_PORT) as server:
-            # server.starttls()
-            server.login(settings.SMTP_USERNAME, settings.SMTP_PASSWORD)
-            server.send_message(msg)
+        print("[EMAIL] Connecting to Resend API...")
+        r = resend.Emails.send({
+            "from": "PULSE Engine <onboarding@resend.dev>", # Change this to your domain later if you verify it on Resend
+            "to": [to_email],
+            "subject": "🧠 PULSE: Your Daily Technical Digest",
+            "html": html_content
+        })
         print("[EMAIL] Digest successfully dispatched to inbox!")
     except Exception as e:
-        print(f"[EMAIL] FAILED to send digest: {e}")
+        print(f"[CRITICAL ERROR] FAILED to send digest via Resend: {e}")
         raise e
     
 def send_magic_link_email(to_email: str, magic_link: str):
-    """Dispatches the secure passwordless login link to the user."""
+    """Dispatches the secure passwordless login link via Resend."""
     print(f"[AUTH] Dispatching Magic Link to {to_email}...")
-    
-    msg = MIMEMultipart("alternative")
-    msg["Subject"] = "PULSE: Your Secure Login Link"
-    msg["From"] = settings.SMTP_USERNAME
-    msg["To"] = to_email
     
     html_content = f"""
     <html>
@@ -105,19 +94,14 @@ def send_magic_link_email(to_email: str, magic_link: str):
     </html>
     """
     
-    msg.attach(MIMEText(html_content, "html"))
-    
     try:
-        # Use standard SMTP for Port 587
-        with smtplib.SMTP(settings.SMTP_SERVER, settings.SMTP_PORT) as server:
-            server.ehlo() 
-            server.starttls()
-            server.login(settings.SMTP_USERNAME, settings.SMTP_PASSWORD)
-            server.send_message(msg)
-            
+        r = resend.Emails.send({
+            "from": "PULSE Auth <onboarding@resend.dev>", # Change this to your domain later if you verify it on Resend
+            "to": [to_email],
+            "subject": "PULSE: Your Secure Login Link",
+            "html": html_content
+        })
         print(f"[AUTH] Successfully sent Magic Link to {to_email}")
         
-    except smtplib.SMTPAuthenticationError as e:
-        print(f"[CRITICAL AUTH ERROR] Gmail rejected the login. Use an App Password! Details: {e}")
     except Exception as e:
         print(f"[CRITICAL ERROR] The email function crashed: {str(e)}")
