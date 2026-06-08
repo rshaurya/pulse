@@ -1,4 +1,5 @@
 from typing import List, Optional
+from fastapi.middleware.cors import CORSMiddleware
 from fastapi import BackgroundTasks, FastAPI, HTTPException, Query, Depends
 from fastapi.responses import HTMLResponse
 from pydantic import BaseModel, HttpUrl
@@ -59,6 +60,14 @@ async def lifespan(app: FastAPI):
 
 
 app = FastAPI(title=settings.PROJECT_NAME, lifespan=lifespan)
+
+app.add_middleware(
+    CORSMiddleware,
+    allow_origins=["http://localhost:3000"], 
+    allow_credentials=True,
+    allow_methods=["*"], 
+    allow_headers=["*"] # improve for production!
+)
 
 @app.get("/")
 async def root():
@@ -314,7 +323,7 @@ async def request_magic_link(
     
     # Construct the Magic Link
     # In production, this will be frontend URL (e.g., https://pulse.com/verify?token=...)
-    magic_link = f"http://localhost:8000/api/auth/verify?token={token}"
+    magic_link = f"http://localhost:3000/verify?token={token}"
     
     # TODO: email this link using services/email.py!
     # right now, print it to the terminal so we can click it
