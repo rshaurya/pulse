@@ -63,7 +63,7 @@ def send_daily_digest(articles: list[dict], to_email: str, user_id: str):
     try:
         print("[EMAIL] Connecting to Resend API...")
         r = resend.Emails.send({
-            "from": "PULSE Engine <onboarding@resend.dev>", # Change this to your domain later if you verify it on Resend
+            "from": "PULSE Engine <shaurya@pulse-ai.me>", # Change this to your domain later if you verify it on Resend
             "to": [to_email],
             "subject": "🧠 PULSE: Your Daily Technical Digest",
             "html": html_content
@@ -96,7 +96,7 @@ def send_magic_link_email(to_email: str, magic_link: str):
     
     try:
         r = resend.Emails.send({
-            "from": "PULSE Auth <onboarding@resend.dev>", # Change this to your domain later if you verify it on Resend
+            "from": "PULSE Auth <shaurya@pulse-ai.me>", # Change this to your domain later if you verify it on Resend
             "to": [to_email],
             "subject": "PULSE: Your Secure Login Link",
             "html": html_content
