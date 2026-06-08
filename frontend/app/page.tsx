@@ -2,7 +2,6 @@
 
 import { useState, FormEvent } from 'react'
 import { Send, Zap, Shield, Brain, ArrowRight } from 'lucide-react'
-import { sendMagicLink } from '@/lib/api'
 
 type Status = 'idle' | 'loading' | 'success' | 'error'
 
