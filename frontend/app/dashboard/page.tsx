@@ -103,7 +103,7 @@ export default function DashboardPage() {
 
       try {
         // 2. Fetch the existing settings from FastAPI
-        const API_URL = process.env.NEXT_PUBLIC_API_URL || "http://localhost:8000";
+        const API_URL = process.env.NEXT_PUBLIC_API_URL;
         const response = await fetch(`${API_URL}/api/users/${userId}/settings`);
         
         if (response.ok) {
@@ -157,7 +157,8 @@ const handleSave = async () => {
       const stringTags = tags.map((tag: Tag) => tag.label);
 
       // 3. The PATCH request to your FastAPI container
-      const response = await fetch(`http://localhost:8000/api/users/${userId}/settings`, {
+      const API_URL = process.env.NEXT_PUBLIC_API_URL;
+      const response = await fetch(`${API_URL}/api/users/${userId}/settings`, {
         method: "PATCH",
         headers: {
           "Content-Type": "application/json",

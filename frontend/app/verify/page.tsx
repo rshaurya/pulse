@@ -19,7 +19,8 @@ function VerifyLogic() {
     const verifyToken = async () => {
       try {
         // The API Call to validate the token with FastAPI
-        const response = await fetch(`http://localhost:8000/api/auth/verify?token=${token}`)
+        const API_URL = process.env.NEXT_PUBLIC_API_URL || "http://localhost:8000";
+        const response = await fetch(`http:${API_URL}/api/auth/verify?token=${token}`)
         
         if (response.ok) {
           const data = await response.json()
