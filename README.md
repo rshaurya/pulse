@@ -1,4 +1,5 @@
-# 🧠 PULSE: The Autonomous AI Knowledge Engine (v0.1)
+# 🧠 PULSE: The Autonomous AI Knowledge Engine (v0.2)
+under construction! still going on with a few enhancements. should be done soon :)
 
 PULSE is a self-hosted, continuous-learning recommendation engine. It is your personal autonomous researcher, waking up daily, hunting the web and academic journals for content tailored to your exact interests, summarizing the noise, and delivering a highly personalized digest straight to your inbox.
 
