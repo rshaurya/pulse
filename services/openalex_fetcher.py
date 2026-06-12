@@ -17,7 +17,7 @@ def reconstruct_abstract(inverted_index: dict) -> str:
     return " ".join([word for _, word in word_index])
 
 
-async def fetch_latest_papers(topic: str, max_results: int = 3) -> list[dict]:
+async def fetch_latest_papers(topic: str, max_results: int = 4) -> list[dict]:
     """Queries the OpenAlex API via the high-speed Polite Pool."""
     
     safe_topic = urllib.parse.quote(topic)

@@ -1,3 +1,4 @@
+import os
 from typing import List, Optional
 from fastapi.middleware.cors import CORSMiddleware
 from fastapi import BackgroundTasks, FastAPI, HTTPException, Query, Depends
@@ -47,7 +48,9 @@ async def lifespan(app: FastAPI):
     scheduler.add_job(run_autonomous_crawler, 'cron', hour=2, minute=0)
     print("[SYSTEM] 2 AM Autonomous Crawler scheduled successfully.")
     
-    scheduler.add_job(run_morning_dispatcher, 'cron', hour=6, minute=0)
+    # run every 2 minutes for testing
+    scheduler.add_job(run_morning_dispatcher, 'interval', minutes=2)
+    # scheduler.add_job(run_morning_dispatcher, 'cron')
     print("[SYSTEM] 6 AM Email Dispatcher scheduled successfully.")
     
     scheduler.start()
@@ -335,11 +338,8 @@ async def request_magic_link(
     
     # Construct the Magic Link
     # In production, this will be frontend URL (e.g., https://pulse.com/verify?token=...)
-    magic_link = f"https://pulse-ai.me/verify?token={token}"
-    
-    # TODO: email this link using services/email.py!
-    # right now, print it to the terminal so we can click it
-    print(f"\\n{'='*50}\\n[MAGIC LINK FOR {email}]:\\n{magic_link}\\n{'='*50}\\n")
+    FRONTEND_URL = os.environ.get("FRONTEND_URL", "http://localhost:3000")
+    magic_link = f"{FRONTEND_URL}/verify?token={token}"
     
     background_tasks.add_task(send_magic_link_email, email, magic_link)
     

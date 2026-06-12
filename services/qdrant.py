@@ -1,5 +1,7 @@
+import time
 import uuid
 from qdrant_client import AsyncQdrantClient, models
+from qdrant_client.http import models
 from qdrant_client.http.models import Distance, VectorParams
 
 from services.llm import generate_embedding
@@ -68,9 +70,40 @@ async def insert_document(title: str, url: str, text: str, summary: str, embeddi
                     "raw_text": text,
                     "summary": summary,
                     "emailed": False,
-                    "user_id": user_id
+                    "user_id": user_id,
+                    "created_at": int(time.time())
                 }
             }
         ]
     )
     return doc_id
+
+async def sweep_stale_vectors(collection_name: str, days_to_keep: int = 30):
+    """Deletes vectors older than the specified sliding window."""
+    
+    db_client = client = AsyncQdrantClient(
+        url=settings.QDRANT_URL,
+        api_key=settings.QDRANT_API_KEY
+    )
+    
+    # Calculate the exact timestamp for 30 days ago
+    cutoff_timestamp = int(time.time()) - (days_to_keep * 24 * 60 * 60)
+    
+    try:
+        # Tell Qdrant to delete by payload filter
+        await db_client.delete(
+            collection_name=collection_name,
+            points_selector=models.Filter(
+                must=[
+                    models.FieldCondition(
+                        key="created_at",
+                        range=models.Range(
+                            lt=cutoff_timestamp # Less than (older than) 30 days
+                        )
+                    )
+                ]
+            )
+        )
+        print(f"[GARBAGE COLLECTION] Swept vectors older than {days_to_keep} days.")
+    except Exception as e:
+        print(f"[SRE ERROR] Failed to sweep stale vectors: {e}")

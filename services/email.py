@@ -13,6 +13,11 @@ def send_daily_digest(articles: list[dict], to_email: str, user_id: str):
     
     # The Base URL where your FastAPI server is running (Your Vercel or Render domain in production)
     BASE_URL = os.environ.get("https://pulse-gjxl.onrender.com")
+    
+    if not BASE_URL or BASE_URL == "None":
+        BASE_URL = "http://localhost:8000"
+        
+    print(f"[EMAIL] Routing feedback buttons to: {BASE_URL}")
 
     html_content = """
     <html>

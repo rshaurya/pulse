@@ -26,6 +26,9 @@ class Settings(BaseSettings):
     # Cloud LLM Settings
     LLM_BASE_URL: str = "http://localhost:11434/api/chat"
     LLM_MODEL: str = "phi3:mini" 
+    LLM_API_KEY: str
+    
+    TAVILY_API_KEY: str
     
     # email settings
     SMTP_USERNAME: str | None = None
@@ -40,6 +43,8 @@ class Settings(BaseSettings):
     
     JWT_SECRET_KEY: str
     
+    class Config:
+        env_file = ".env"
 
 settings = Settings()
 

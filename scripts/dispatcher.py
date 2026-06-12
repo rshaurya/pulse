@@ -91,14 +91,14 @@ async def generate_daily_digest(user_id: str, user_email: str):
         print(f"[DISPATCHER] Digest sent! PostgreSQL ledger updated for {user_email}.")
         
 async def run_morning_dispatcher():
-    """Wakes up at 8 AM, finds all users, and sends them their personalized emails."""
+    """Wakes up at 6 AM, finds all users, and sends them their personalized emails."""
     print("[MORNING DISPATCHER] Waking up. Preparing daily emails...")
     
     async with AsyncSession(engine) as session:
         # Fetch all active users
         statement = select(User).where(User.encrypted_llm_api_key != None)
         result = await session.exec(statement)
-        active_users = result.scalars().all()
+        active_users = result.all()
         
         if not active_users:
             print("[MORNING DISPATCHER] No active users found. Going back to sleep.")

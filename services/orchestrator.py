@@ -8,6 +8,7 @@ from sqlmodel import select
 from sqlalchemy.orm import sessionmaker
 
 from core.database import engine
+from services.qdrant import sweep_stale_vectors
 from core.models import User, UserProfile
 from core.security import decrypt_api_key
 
@@ -132,5 +133,7 @@ async def run_autonomous_crawler():
             print(f"[PHASE 3] Summarizing and Vaulting data for {user.email}...")
             # Hand the decrypted LLM key to the processor so Groq bills the user, not you!
             await process_and_store_articles(final_articles, user_id=user.id, llm_api_key=llm_key, user_context=context_string)
+            
+            sweep_stale_vectors()
             
     print("\n[AUTONOMOUS CRAWLER] Global run complete. Going back to sleep.")
