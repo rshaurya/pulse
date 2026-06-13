@@ -49,8 +49,8 @@ async def lifespan(app: FastAPI):
     print("[SYSTEM] 2 AM Autonomous Crawler scheduled successfully.")
     
     # run every 2 minutes for testing
-    scheduler.add_job(run_morning_dispatcher, 'interval', minutes=2)
-    # scheduler.add_job(run_morning_dispatcher, 'cron')
+    # scheduler.add_job(run_morning_dispatcher, 'interval', minutes=3)
+    scheduler.add_job(run_morning_dispatcher, 'cron', hour=6, minute=0)
     print("[SYSTEM] 6 AM Email Dispatcher scheduled successfully.")
     
     scheduler.start()
@@ -68,9 +68,7 @@ app.add_middleware(
     CORSMiddleware,
     allow_origins=[
         "http://localhost:3000",                  
-        "https://pulse-delta-inky.vercel.app",    
-        "https://pulse-ai.me",                    
-        "https://www.pulse-ai.me"], 
+        "https://pulse-delta-inky.vercel.app"], 
     allow_credentials=True,
     allow_methods=["*"], 
     allow_headers=["*"] # improve for production!
@@ -338,8 +336,8 @@ async def request_magic_link(
     
     # Construct the Magic Link
     # In production, this will be frontend URL (e.g., https://pulse.com/verify?token=...)
-    FRONTEND_URL = os.environ.get("FRONTEND_URL", "http://localhost:3000")
-    magic_link = f"{FRONTEND_URL}/verify?token={token}"
+    # FRONTEND_URL = os.environ.get("FRONTEND_URL", "http://localhost:3000")
+    magic_link = f"http://localhost:8000/verify?token={token}"
     
     background_tasks.add_task(send_magic_link_email, email, magic_link)
     
