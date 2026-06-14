@@ -68,7 +68,7 @@ app.add_middleware(
     CORSMiddleware,
     allow_origins=[
         "http://localhost:3000",                  
-        "https://pulse-delta-inky.vercel.app"], 
+        "https://pulse-gjxl.onrender.com"], 
     allow_credentials=True,
     allow_methods=["*"], 
     allow_headers=["*"] # improve for production!
@@ -337,7 +337,8 @@ async def request_magic_link(
     # Construct the Magic Link
     # In production, this will be frontend URL (e.g., https://pulse.com/verify?token=...)
     # FRONTEND_URL = os.environ.get("FRONTEND_URL", "http://localhost:3000")
-    magic_link = f"http://localhost:8000/api/auth/verify?token={token}"
+    # FOR LOCAL TESTING: magic_link = f"http://localhost:8000/api/auth/verify?token={token}"
+    magic_link = f"https://pulse-gjxl.onrender.com/api/auth/verify?token={token}"
     
     background_tasks.add_task(send_magic_link_email, email, magic_link)
     
