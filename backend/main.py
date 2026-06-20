@@ -334,12 +334,10 @@ async def request_magic_link(
     token = create_magic_token(email)
     
     # Construct the Magic Link
-    # In production, this will be frontend URL (e.g., https://pulse.com/verify?token=...)
-    magic_link = f"https://pulse-ai.me/verify?token={token}"
+    magic_link = f"http://localhost:8000/api/auth/verify?token={token}"
     
     # TODO: email this link using services/email.py!
     # right now, print it to the terminal so we can click it
-    print(f"\\n{'='*50}\\n[MAGIC LINK FOR {email}]:\\n{magic_link}\\n{'='*50}\\n")
     
     background_tasks.add_task(send_magic_link_email, email, magic_link)
     
