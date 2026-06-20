@@ -58,7 +58,7 @@ export default function LandingPage() {
     
     try {
       // The Real API Call to your FastAPI backend
-      const API_URL = process.env.NEXT_PUBLIC_API_URL || "http://localhost:8000";
+      const API_URL = "http://localhost:8000";
       const response = await fetch(`${API_URL}/api/auth/request`, {
         method: "POST",
         headers: {
