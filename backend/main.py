@@ -336,9 +336,6 @@ async def request_magic_link(
     # Construct the Magic Link
     magic_link = f"http://localhost:8000/api/auth/verify?token={token}"
     
-    # TODO: email this link using services/email.py!
-    # right now, print it to the terminal so we can click it
-    
     background_tasks.add_task(send_magic_link_email, email, magic_link)
     
     return {"status": "success", "message": "Check your email for the magic link!"}
