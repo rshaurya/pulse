@@ -334,7 +334,7 @@ async def request_magic_link(
     token = create_magic_token(email)
     
     # Construct the Magic Link
-    magic_link = f"http://localhost:8000/api/auth/verify?token={token}"
+    magic_link = f"http://localhost:3000/verify?token={token}"
     
     background_tasks.add_task(send_magic_link_email, email, magic_link)
     
