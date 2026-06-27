@@ -164,7 +164,7 @@ const handleSave = async () => {
           "Content-Type": "application/json",
         },
         body: JSON.stringify({
-          groq_api_key: groqKey, // Make sure these match your actual state variables!
+          llm_api_key: groqKey, // Make sure these match your actual state variables!
           tavily_api_key: tavilyKey,
           core_interests: stringTags
         }),
