@@ -144,6 +144,9 @@ backend/
 ├── Dockerfile                  # Container build instructions  
 └── requirements.txt            # Python dependencies
 ```
+**Notes**  
+While this is self hosted and runs locally, it does require one to keep their device (laptop or PC) up and running at all times. If, like me, you can't do that, I'd recommend forking this repo and connecting it to Render. The setup is pretty simple and straightforward. One additional thing you'd have to do is to set up cron jobs (I use [this](https://cron-job.org/en/)) every 14 minutes to your render web service to keep it up an running.   
+
 
 ## The Future of PULSE (v0.3 and Beyond)
 
@@ -152,6 +155,7 @@ backend/
 - With the web interface and core engine locked in, the next phase will focus on scaling: introducing Celery/Redis for distributed task queuing, and building a user analytics dashboard to visually map out how your interests have shifted over time. 
 - Agents will be introduced to reason which article is the best according to the user's current interests before inserting the article to Groq  
 - Implement parsing to extract text from websites without rss feeds  
+
 
 ## Support & Feedback 
 **Not getting the results you want?**  
