@@ -1,6 +1,9 @@
 import asyncio
+from sqlalchemy.orm import sessionmaker
 from services.llm import summarize_text, generate_embedding
 from services.qdrant import insert_document
+from core.database import AsyncSession, engine
+from core.models import ArticleState
 
 async def process_and_store_articles(articles: list[dict], user_id: str, llm_api_key: str, user_context: str = ""):
     """Background worker that processes raw articles and stores them in Qdrant for a specific user."""
@@ -43,7 +46,7 @@ async def process_and_store_articles(articles: list[dict], user_id: str, llm_api
             embedding = await generate_embedding(summary)
             
             # attach the user_id to the Qdrant payload!
-            await insert_document(
+            qdrant_id = await insert_document(
                 title=article.get('title', 'Untitled'),
                 url=article.get('url', '#'),
                 text=full_payload_text, 
@@ -51,6 +54,17 @@ async def process_and_store_articles(articles: list[dict], user_id: str, llm_api
                 embedding=embedding,
                 user_id=str(user_id) 
             )
+            
+            async_session = sessionmaker(engine, class_=AsyncSession, expire_on_commit=False)
+            async with async_session() as session:
+                new_article_state = ArticleState(
+                    user_id=user_id,
+                    qdrant_doc_id=str(qdrant_id),
+                    emailed=False
+                )
+                session.add(new_article_state)
+                await session.commit()
+            
             
             successful_inserts += 1
             await asyncio.sleep(2) 
