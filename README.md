@@ -11,7 +11,7 @@ The v0.2 release focuses on system resilience, data security, and multi-tenant s
   * **2:00 AM UTC:** The autonomous crawler wakes up, decrypts keys, sends out API requests (RSS, OpenAlex, Tavily, Groq), processes embeddings, and stores vectors.
   * **6:00 AM UTC:** The Dispatcher wakes up, runs a semantic similarity search against Qdrant, filters out previously sent articles via a PostgreSQL ledger, and dispatches the email.
 * **Resilient LLM Pipelines:** Built with Fault Isolation and Exponential Backoff in order to handle LLM provider rate limits (429s) without crashing the ingestion server.
-* **Concept Drift (Sliding Window):** The user's  "brain" dynamically tunes itself based on feedback via email webhooks. To prevent LLM prompt bloat, the PostgreSQL arrays use a sliding window, automatically forgetting old interests as new ones are explored.
+* **Concept Drift (Sliding Window):** The user's  "brain" dynamically tunes itself based on feedback via email webhooks.  
 * **Semantic Gatekeeping:** Qdrant payload indexing (`user_id` as KEYWORD) guarantees O(1) lookup speeds, and a `0.40` Cosine Similarity threshold ensures the system refuses to send irrelevant articles.
 
 ## Tech Stack
@@ -27,7 +27,7 @@ The v0.2 release focuses on system resilience, data security, and multi-tenant s
 
 * **v0.1 - The Personal Edition:** was geared toward people who were comfortable with local env setups. It lacked a GUI. One had to configure your "brain" using a local JSON file, and then boot the engine using Docker. This version had `.env` files, API keys, etc. and PULSE would run on their local machine.   
 
-* **v0.2:** is for everyone :) v0.2 has a UI and is deployed fully. Other architectural upgrades are mentioned above.  
+* **v0.2:** is for everyone :) Other architectural upgrades are mentioned above.  
 
 ---
 
@@ -42,7 +42,21 @@ cd pulse
 ```
 
 **2. Configure the Environment**  
-Rename the `.env_template` file to `.env` and fill in your API keys (Groq, Tavily, Qdrant) and your SMTP Email credentials. And a newly generated 32-byte Base64 string for your ENCRYPTION_KEY (to lock the Fernet Vault).  
+Rename the `.env_template` file in the `backend/` folder  to `.env` and fill in your API keys (Qdrant Cloud, Qdrant). 
+- Make sure you're in the `backend/` directory and run `pip install -r requirements.txt`    
+- To generate your `JWT_SECRET_KEY`, run:
+`python -c "import secrets; print(secrets.token_hex(32))"`   
+- To generate your `ENCRYPTION_MASTER_KEY`, run:
+`python -c "from cryptography.fernet import Fernet; print(Fernet.generate_key().decode())"`  
+- To get your `DATABASE_URL`, go to [neon.com](neon.com), sign up and create a new database and paste the url.  
+!! Important changes to make:  
+your url might look something like this `postgresql://neondb_owner:npg_iuebfyewb@siefbsbsjde.ap-southeast-2.aws.neon.tech/neondb?sslmode=require` (not exactly)  
+you have to make the following changes:  
+1. add `postgresql+asyncpg` before the `:`  
+2. change `sslmode=require` (or whatever it is showing in your case) to `ssl=require`  
+
+It is advised to leave the `LLM_API_KEY` and `TAVILY_API_KEY` as is.  
+
 
 **3. Spin up Backend Server**  
 Spin up the FastAPI server in the background:
@@ -56,10 +70,7 @@ docker compose up -d --build
 cd ../frontend
 npm install
 npm run dev
-```
-
-**6. Setup Environment Variables**  
-- 
+```  
 
 **6. Usage**
 You can interact with PULSE in two ways: through the Next.js UI (recommended), or directly via the Backend API documentation.  
@@ -68,15 +79,12 @@ You can interact with PULSE in two ways: through the Next.js UI (recommended), o
 - If you're using the Swagger UI, navigate to `http://localhost:8000/docs` in your browser.  
 - Locate the `POST /api/auth/request` endpoint and enter your email address.  
 - Check your terminal logs (or your email inbox) for the secure Magic Link. Click it to verify your session and generate your unique `user_id`.  
-
-**5. Configure Your Brain**
 - In the Swagger UI, locate the `PATCH /api/users/{user_id}/settings` endpoint.  
-- Input your `user_id` and pass a JSON payload containing your personal Groq/Tavily API keys and an array of your `core_interests`.
-- Note: Your API keys are instantly encrypted via AES-128 before saving to PostgreSQL.  
+- Input your `user_id` and pass a JSON payload containing your personal Groq/Tavily API keys and an array of your `core_interests`.  
+- Note: You can view the logs via this command: `docker logs -f pulse-app`  
 
-**6. Trigger the Engine**
-By default, the internal APScheduler will run the Master Crawler at 2:00 AM UTC and the Email Dispatcher at 8:00 AM UTC.  
-To test it immediately, manually trigger the `POST /api/ingest/autonomous` endpoint in Swagger UI to watch the engine decrypt your keys, scour the web, summarize the findings, and vault the vectors into Qdrant.
+By default, the internal APScheduler will run the Master Crawler at 2:00 AM UTC and the Email Dispatcher at 6:00 AM UTC.  
+To test it immediately, manually trigger the `POST /api/ingest/autonomous` endpoint in Swagger UI to watch the engine decrypt your keys, scour the web, summarize the findings, and vault the vectors into Qdrant.  
 
 ## File System Architecture
 For those looking under the hood, the architecture is modular:  
@@ -97,7 +105,6 @@ pulse/
 │   ├── package.json          # Node dependencies
 │   └── tailwind.config.ts    # Styling configurations
 │
-├── .env.example              # Template for environment variables
 └── README.md
 ```
 
