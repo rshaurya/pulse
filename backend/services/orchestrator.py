@@ -65,72 +65,72 @@ async def run_autonomous_crawler():
 
         # Loop through every user sequentially
         # TODO: find a better method for search. this might break with large number of users
-        for user in active_users:
-            print(f"\n{'='*50}\n[CRAWLING FOR USER]: {user.email}\n{'='*50}")
-            
-            # Fetch their Brain
-            profile_statement = select(UserProfile).where(UserProfile.user_id == user.id)
-            profile_result = await session.execute(profile_statement)
-            profile = profile_result.scalars().first()
+    for user in active_users:
+        print(f"\n{'='*50}\n[CRAWLING FOR USER]: {user.email}\n{'='*50}")
         
-            if not profile:
-                continue
+        # Fetch their Brain
+        profile_statement = select(UserProfile).where(UserProfile.user_id == user.id)
+        profile_result = await session.execute(profile_statement)
+        profile = profile_result.scalars().first()
+    
+        if not profile:
+            continue
 
-            # Decrypt their API keys
-            llm_key = decrypt_api_key(user.encrypted_llm_api_key)
-            tavily_key = decrypt_api_key(user.encrypted_tavily_api_key)
-            
-            # Combine core interests and focus areas
-            topics = profile.core_interests + profile.focus_areas
-            rss_feeds = profile.rss_feeds
-            
-            if not topics and not rss_feeds:
-                print(f"[SKIP] User {user.email} has no topics configured.")
-                continue
+        # Decrypt their API keys
+        llm_key = decrypt_api_key(user.encrypted_llm_api_key)
+        tavily_key = decrypt_api_key(user.encrypted_tavily_api_key)
+        
+        # Combine core interests and focus areas
+        topics = profile.core_interests + profile.focus_areas
+        rss_feeds = profile.rss_feeds
+        
+        if not topics and not rss_feeds:
+            print(f"[SKIP] User {user.email} has no topics configured.")
+            continue
 
-            # DISCOVERY PHASE (Pass the decrypted Tavily key)
-            print(f"[PHASE 1] Discovering URLs for {user.email}...")
-            search_tasks = [fetch_urls_for_topic(topic, tavily_key) for topic in topics] if tavily_key else []
-            paper_tasks = [fetch_latest_papers(topic) for topic in topics]
-            rss_tasks = [fetch_all_rss_feeds(rss_feeds, max_per_feed=2)] if rss_feeds else []
-            
-            discovered_url_lists = await asyncio.gather(*search_tasks, return_exceptions=True)
-            discovered_papers_lists = await asyncio.gather(*paper_tasks, return_exceptions=True)
-            discovered_rss_lists = await asyncio.gather(*rss_tasks, return_exceptions=True)
-            
-            target_urls = []
-            for url_list in discovered_url_lists:
-                if isinstance(url_list, list):
-                    target_urls.extend(url_list)
-                    
-            for rss_list in discovered_rss_lists:
-                if isinstance(rss_list, list):
-                    target_urls.append(rss_list)
+        # DISCOVERY PHASE (Pass the decrypted Tavily key)
+        print(f"[PHASE 1] Discovering URLs for {user.email}...")
+        search_tasks = [fetch_urls_for_topic(topic, tavily_key) for topic in topics] if tavily_key else []
+        paper_tasks = [fetch_latest_papers(topic) for topic in topics]
+        rss_tasks = [fetch_all_rss_feeds(rss_feeds, max_per_feed=2)] if rss_feeds else []
+        
+        discovered_url_lists = await asyncio.gather(*search_tasks, return_exceptions=True)
+        discovered_papers_lists = await asyncio.gather(*paper_tasks, return_exceptions=True)
+        discovered_rss_lists = await asyncio.gather(*rss_tasks, return_exceptions=True)
+        
+        target_urls = []
+        for url_list in discovered_url_lists:
+            if isinstance(url_list, list):
+                target_urls.extend(url_list)
+                
+        for rss_list in discovered_rss_lists:
+            if isinstance(rss_list, list):
+                target_urls.append(rss_list)
 
-            # EXTRACTION PHASE
-            print(f"[PHASE 2] Extracting Text for {user.email}...")
-            url_fetch_tasks = [safe_fetch_url(url) for url in target_urls]
-            url_results = await asyncio.gather(*url_fetch_tasks, return_exceptions=True)
-            
-            # Consolidate surviving articles
-            final_articles = []
-            for res in url_results:
-                if isinstance(res, dict): final_articles.append(res)
-            for paper_list in discovered_papers_lists:
-                if isinstance(paper_list, list):
-                    for paper in paper_list:
-                        if len(paper.get("abstract", "")) > 100: final_articles.append(paper)
+        # EXTRACTION PHASE
+        print(f"[PHASE 2] Extracting Text for {user.email}...")
+        url_fetch_tasks = [safe_fetch_url(url) for url in target_urls]
+        url_results = await asyncio.gather(*url_fetch_tasks, return_exceptions=True)
+        
+        # Consolidate surviving articles
+        final_articles = []
+        for res in url_results:
+            if isinstance(res, dict): final_articles.append(res)
+        for paper_list in discovered_papers_lists:
+            if isinstance(paper_list, list):
+                for paper in paper_list:
+                    if len(paper.get("abstract", "")) > 100: final_articles.append(paper)
 
-            if not final_articles:
-                print(f"[ABORT] No valid articles survived for {user.email}.")
-                continue
-            
-            topics = profile.core_interests + profile.focus_areas
-            context_string = ", ".join(topics)
-            
-            # PROCESSING PHASE
-            print(f"[PHASE 3] Summarizing and Vaulting data for {user.email}...")
-            # Hand the decrypted LLM key to the processor so Groq bills the user, not you!
-            await process_and_store_articles(final_articles, user_id=user.id, llm_api_key=llm_key, user_context=context_string)
+        if not final_articles:
+            print(f"[ABORT] No valid articles survived for {user.email}.")
+            continue
+        
+        topics = profile.core_interests + profile.focus_areas
+        context_string = ", ".join(topics)
+        
+        # PROCESSING PHASE
+        print(f"[PHASE 3] Summarizing and Vaulting data for {user.email}...")
+        # Hand the decrypted LLM key to the processor so Groq bills the user, not you!
+        await process_and_store_articles(final_articles, user_id=user.id, llm_api_key=llm_key, user_context=context_string)
             
     print("\n[AUTONOMOUS CRAWLER] Global run complete. Going back to sleep.")
