@@ -134,6 +134,6 @@ async def run_autonomous_crawler():
         # Hand the decrypted LLM key to the processor so Groq bills the user, not you!
         await process_and_store_articles(final_articles, user_id=user.id, llm_api_key=llm_key, user_context=context_string)
             
-            sweep_stale_vectors()
+        sweep_stale_vectors()
             
     print("\n[AUTONOMOUS CRAWLER] Global run complete. Going back to sleep.")
