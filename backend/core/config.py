@@ -27,11 +27,6 @@ class Settings(BaseSettings):
     LLM_BASE_URL: str = "http://localhost:11434/api/chat"
     LLM_MODEL: str = "phi3:mini" 
     LLM_API_KEY: str
-<<<<<<< HEAD:backend/core/config.py
-=======
-    
-    TAVILY_API_KEY: str
->>>>>>> master:core/config.py
     
     # email settings
     SMTP_USERNAME: str | None = None
